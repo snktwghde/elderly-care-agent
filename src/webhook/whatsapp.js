@@ -11,6 +11,8 @@ router.get('/', (req, res) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
+  console.log('Webhook verify attempt:', { mode, token, expected: config.whatsapp.verifyToken });
+
   if (mode === 'subscribe' && token === config.whatsapp.verifyToken) {
     console.log('Webhook verified by Meta');
     return res.status(200).send(challenge);

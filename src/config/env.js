@@ -6,7 +6,7 @@ const REQUIRED_VARS = [
   'WEBHOOK_VERIFY_TOKEN',
   'ANTHROPIC_API_KEY',
   'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
+  'SUPABASE_SERVICE_KEY',
 ];
 
 const missing = REQUIRED_VARS.filter((key) => !process.env[key]);
@@ -27,6 +27,6 @@ export const config = {
   },
   supabase: {
     url: process.env.SUPABASE_URL,
-    anonKey: process.env.SUPABASE_ANON_KEY,
+    serviceKey: process.env.SUPABASE_SERVICE_KEY,
   },
 };

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config/env.js';
 
-const supabase = createClient(config.supabase.url, config.supabase.anonKey);
+const supabase = createClient(config.supabase.url, config.supabase.serviceKey);
 
 export async function getUser(phone) {
   const { data, error } = await supabase

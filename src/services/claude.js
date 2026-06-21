@@ -35,7 +35,7 @@ export async function parseIntent(messageText) {
     messages: [{ role: 'user', content: messageText }],
   });
 
-  const raw = message.content[0].text.trim();
+  const raw = message.content[0].text.trim().replace(/^```json\s*/i, '').replace(/```$/,'').trim();
 
   try {
     return JSON.parse(raw);
