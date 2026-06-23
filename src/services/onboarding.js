@@ -35,9 +35,9 @@ const Q = {
   },
 
   contacts: {
-    english: `Share up to 3 contact numbers for emergencies (family or friends we should notify). Send them together or one by one.`,
-    marathi: `आपत्कालीन परिस्थितीत सूचित करायच्या 3 जणांचे नंबर द्या. एकत्र किंवा वेगळे पाठवू शकता.`,
-    hindi:   `आपातकाल में सूचित करने के लिए 3 संपर्क नंबर दें. एक साथ या अलग-अलग भेज सकते हैं.`,
+    english: `Share up to 2 contact numbers for emergencies (family or friends we should notify). Send them together or one by one.`,
+    marathi: `आपत्कालीन परिस्थितीत सूचित करायच्या 2 जणांचे नंबर द्या. एकत्र किंवा वेगळे पाठवू शकता.`,
+    hindi:   `आपातकाल में सूचित करने के लिए 2 संपर्क नंबर दें. एक साथ या अलग-अलग भेज सकते हैं.`,
   },
 
   doctor: {
@@ -73,7 +73,7 @@ function parseContacts(text, accountPhone, accountType) {
   if (accountType === 'caregiver' && !contacts.includes(accountPhone)) {
     contacts.unshift(accountPhone);
   }
-  return contacts.slice(0, 3);
+  return contacts.slice(0, 2);
 }
 
 export async function handleOnboarding(account, messageText) {
