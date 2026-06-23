@@ -70,10 +70,13 @@ A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** �
 - [ ] Test: send "book doctor appointment" on WhatsApp → Claude parses intent → logs to console
 
 ### Phase 2 — Onboarding (Week 2–3)
-- [ ] Adult child/Family member/User onboarding flow via WhatsApp
-- [ ] Collect: parent/elderly name, home address, preferred language, family contacts, existing doctors
-- [ ] Store all in Supabase user_profile
-- [ ] Test: complete onboarding for one test user, verify data in Supabase
+- [ ] **New schema**: create `accounts` + `care_recipients` tables in Supabase (replaces single `user_profile`); RLS on both
+- [ ] **Conversation memory**: create `conversation_history` table; fetch last 10 messages per account on every Claude call; store as plain text not JSON (2x cheaper)
+- [ ] Onboarding flow — first question: "Are you setting this up for yourself or for an elderly family member?"
+- [ ] If self: collect their own name, phone auto-known (account_phone), address, language, family contacts, existing doctors
+- [ ] If caregiver: collect elderly person's name, their phone number, address, language, existing doctors; caregiver's number auto-added to family_contacts
+- [ ] Store completed profile in `accounts` + `care_recipients` tables
+- [ ] Test: complete both flows (self + caregiver), verify correct data in Supabase
 
 ### Phase 3 — Clinic Finder (Week 3)
 - [ ] Google Maps Places API integration
@@ -123,6 +126,8 @@ A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** �
 ### Phase 9 — Polish + Launch (Week 6–7)
 - [ ] Multi-language: Hindi, Marathi, English detection and response
 - [ ] Error handling: what happens when clinic doesn't answer, API fails, etc.
+- [ ] **Structured logging**: log every incoming message, parsed intent, and outgoing reply to Supabase `message_logs` table — gives visibility into what's failing in production
+- [ ] **Monitoring**: alert when intent parsing falls back to "unknown" more than N times/hour (silent failure signal); alert on WhatsApp send failures
 - [ ] Deploy to Railway
 - [ ] End-to-end test with real users (start with own parents)
 - [ ] Fix critical bugs only, launch
@@ -148,19 +153,30 @@ All research archived in `/research/` with source citations. See `/research/READ
 
 ## User Profiles (Supabase Schema)
 
+Designed for 1:many — one account can have multiple care recipients (individual plan = 1, family plan = 2+).
+V1 implements 1 care recipient per account. Family plan pricing added in Phase 8. No migration needed when it comes.
+
 ```
-user_profile {
-  elderly_user_phone: string
-  elderly_user_name: string
-  preferred_language: string (hindi/marathi/english)
+accounts {
+  account_phone: string          // WhatsApp number that messages the bot (PK)
+  account_type: string           // 'self' | 'caregiver'
+  subscription_status: string    // 'trial' | 'active' | 'expired'
+  razorpay_subscription_id: string
+  created_at: timestamp
+}
+
+care_recipients {
+  id: uuid (PK)
+  account_phone: string          // FK → accounts.account_phone
+  recipient_name: string
+  recipient_phone: string        // elderly person's phone (same as account_phone if account_type='self')
+  preferred_language: string     // 'hindi' | 'marathi' | 'english'
   home_address: string
   home_lat_lng: coordinates
-  family_contacts: [phone1, phone2, phone3]
+  family_contacts: [phone1, phone2, phone3]  // caregiver's number auto-added if account_type='caregiver'
   saved_doctors: [{ name, clinic, phone }]
   medication_schedule: [{ name, time, days }]
-  onboarded_by: adult_child_phone
-  subscription_status: active/trial/expired
-  razorpay_subscription_id: string
+  created_at: timestamp
 }
 ```
 
@@ -243,6 +259,27 @@ Claude API parses intent (language-agnostic)
 6. **Approve before execute** — review every plan, change what's wrong
 7. **CLAUDE.md is the source of truth** — update it when major decisions change
 8. **Never build what wasn't discussed** — scope creep is the enemy of shipping
+
+---
+
+## How to Get the Best from Claude (Role Prompts by Situation)
+
+The difference is not the tool — it's how you prompt it. Give Claude a role + context + decision frame.
+
+### Day-to-day coding (use this every session)
+> "Act like a senior technical lead who is responsible for maintaining CareProxy for the next 5 years. Before writing any code: ask clarifying questions, challenge bad decisions, identify scaling risks, suggest simpler approaches. Prioritise simplicity over cleverness."
+
+### When resuming after a break / something feels broken
+> "Act like a senior engineer who just joined this codebase. Reverse-engineer the architecture, understand the complete data flow, then identify any bad decisions, duplicate logic, or performance bottlenecks before touching anything."
+
+### When debugging an error
+> "Act like a senior debugging engineer investigating a live production issue. Analyse the codebase step by step. Understand what the code actually does, trace the real root cause, explain why the failure happens, then provide a fixed production-ready solution."
+
+### Before Phase 8 — Payments (security review)
+> "Act like a senior security engineer auditing a production application. Carefully inspect for: security vulnerabilities, authentication flaws, API weaknesses, injection risks, sensitive data exposure, infrastructure risks. Provide a vulnerability report with severity levels and secure fixes."
+
+### Before Phase 9 — Railway deployment
+> "Act like a senior DevOps engineer preparing CareProxy for real production deployment. Design the deployment architecture, configure CI/CD, set up monitoring and logging, improve reliability, and reduce downtime risks."
 
 ---
 

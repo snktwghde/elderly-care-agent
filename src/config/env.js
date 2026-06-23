@@ -7,6 +7,7 @@ const REQUIRED_VARS = [
   'ANTHROPIC_API_KEY',
   'SUPABASE_URL',
   'SUPABASE_SERVICE_KEY',
+  'GOOGLE_MAPS_API_KEY',
 ];
 
 const missing = REQUIRED_VARS.filter((key) => !process.env[key]);
@@ -28,5 +29,8 @@ export const config = {
   supabase: {
     url: process.env.SUPABASE_URL,
     serviceKey: process.env.SUPABASE_SERVICE_KEY,
+  },
+  maps: {
+    apiKey: process.env.GOOGLE_MAPS_API_KEY,
   },
 };

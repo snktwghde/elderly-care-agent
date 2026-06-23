@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "tunnel": "ngrok http --domain=ranging-silliness-banknote.ngrok-free.dev 3000"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
