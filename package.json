@@ -7,14 +7,18 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "tunnel": "ngrok http --domain=ranging-silliness-banknote.ngrok-free.dev 3000"
+    "tunnel": "\"C:\\Users\\DELL\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe\\ngrok.exe\" http --domain=ranging-silliness-banknote.ngrok-free.dev 3000"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
     "@supabase/supabase-js": "^2.50.0",
     "axios": "^1.9.0",
     "dotenv": "^16.5.0",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.5.2",
+    "node-cron": "^4.5.0",
+    "razorpay": "^2.9.6",
+    "twilio": "^6.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

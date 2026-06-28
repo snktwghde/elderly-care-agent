@@ -29,15 +29,15 @@ const Q = {
   },
 
   recipient_phone: {
-    english: (name) => `What is ${name}'s WhatsApp number? We will send reminders directly to them.\n\nFormat: 91XXXXXXXXXX`,
-    marathi: (name) => `${name} यांचा WhatsApp नंबर काय आहे? आम्ही त्यांना थेट reminders पाठवू.\n\nFormat: 91XXXXXXXXXX`,
-    hindi:   (name) => `${name} का WhatsApp नंबर क्या है? हम उन्हें सीधे reminders भेजेंगे.\n\nFormat: 91XXXXXXXXXX`,
+    english: (name) => `What is ${name}'s WhatsApp number? We will send reminders directly to them.\n\nEnter 10-digit number (e.g. 9876543210)`,
+    marathi: (name) => `${name} यांचा WhatsApp नंबर काय आहे? आम्ही त्यांना थेट reminders पाठवू.\n\n10 आकडी नंबर टाका (उदा. 9876543210)`,
+    hindi:   (name) => `${name} का WhatsApp नंबर क्या है? हम उन्हें सीधे reminders भेजेंगे.\n\n10 अंक का नंबर दें (जैसे 9876543210)`,
   },
 
   contacts: {
-    english: `Share up to 2 contact numbers for emergencies (family or friends we should notify). Send them together or one by one.`,
-    marathi: `आपत्कालीन परिस्थितीत सूचित करायच्या 2 जणांचे नंबर द्या. एकत्र किंवा वेगळे पाठवू शकता.`,
-    hindi:   `आपातकाल में सूचित करने के लिए 2 संपर्क नंबर दें. एक साथ या अलग-अलग भेज सकते हैं.`,
+    english: `Share up to 2 contact numbers to notify in emergencies. You can enter 10-digit numbers (e.g. 9876543210).`,
+    marathi: `आपत्कालीन परिस्थितीत सूचित करायच्या 2 जणांचे नंबर द्या. 10 आकडी नंबर चालेल (उदा. 9876543210).`,
+    hindi:   `आपातकाल में सूचित करने के लिए 2 संपर्क नंबर दें. 10 अंक का नंबर चलेगा (जैसे 9876543210).`,
   },
 
   doctor: {
@@ -67,9 +67,16 @@ function parseAccountType(text) {
   return 'caregiver';
 }
 
+function normalisePhone(raw) {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10) return `+91${digits}`;
+  if (digits.startsWith('91') && digits.length === 12) return `+${digits}`;
+  return `+${digits}`;
+}
+
 function parseContacts(text, accountPhone, accountType) {
-  const numbers = text.match(/\d{10,12}/g) || [];
-  const contacts = numbers.map(n => n.length === 10 ? `91${n}` : n);
+  const numbers = text.match(/[\d+]{10,13}/g) || [];
+  const contacts = numbers.map(normalisePhone);
   if (accountType === 'caregiver' && !contacts.includes(accountPhone)) {
     contacts.unshift(accountPhone);
   }
@@ -128,9 +135,10 @@ export async function handleOnboarding(account, messageText) {
     }
 
     case 'recipient_phone': {
+      const recipientPhone = normalisePhone(messageText.trim());
       await updateAccount(account.account_phone, {
         onboarding_step: 'contacts',
-        onboarding_data: { ...data, recipient_phone: messageText.trim() },
+        onboarding_data: { ...data, recipient_phone: recipientPhone },
       });
       return Q.contacts[lang];
     }

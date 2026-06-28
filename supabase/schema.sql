@@ -76,3 +76,16 @@ create trigger accounts_updated_at
 create trigger care_recipients_updated_at
   before update on care_recipients
   for each row execute function update_updated_at();
+
+-- ─── RLS policies ────────────────────────────────────────────────────────────
+-- The backend uses the service role key which bypasses RLS.
+-- These policies protect against anon key exposure or misconfiguration.
+
+create policy "service role only" on accounts
+  for all using (auth.role() = 'service_role');
+
+create policy "service role only" on care_recipients
+  for all using (auth.role() = 'service_role');
+
+create policy "service role only" on conversation_history
+  for all using (auth.role() = 'service_role');

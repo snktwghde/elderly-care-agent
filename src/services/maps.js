@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config/env.js';
+import { getCachedClinics, cacheClinics } from './supabase.js';
 
 const MAPS_API = 'https://maps.googleapis.com/maps/api';
 
@@ -54,11 +55,28 @@ async function formatPlaces(places) {
 }
 
 export async function findNearbyClinics(homeAddress, specialty = null) {
+  const cacheKey = `${homeAddress.toLowerCase().trim()}::${specialty || 'general'}`;
+
+  const cached = await getCachedClinics(cacheKey).catch(() => null);
+  if (cached) {
+    return {
+      clinics: cached.clinics,
+      nextPageToken: cached.next_page_token,
+      lat: cached.lat,
+      lng: cached.lng,
+      keyword: cached.keyword,
+    };
+  }
+
   const { lat, lng } = await geocodeAddress(homeAddress);
   const keyword = specialty ? `${specialty} hospital` : 'clinic';
   const { results, nextPageToken } = await searchNearby(lat, lng, keyword);
   const clinics = await formatPlaces(results.slice(0, 5));
-  return { clinics, nextPageToken, lat, lng, keyword };
+
+  const result = { clinics, nextPageToken, lat, lng, keyword };
+  cacheClinics(cacheKey, result).catch(e => console.error('[Maps cache write]', e.message));
+
+  return result;
 }
 
 export async function findMoreClinics(pageToken) {

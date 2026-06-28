@@ -10,7 +10,7 @@
 
 A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** — handling clinic appointment booking (via voice call), medication reminders, family notifications, and emergency SOS coordination.
 
-- **Who pays**: Adult children (28–40, urban India), ₹199/month
+- **Who pays**: Adult children (28–40, urban India), ₹299/month
 - **Who uses**: Elderly parents (60+), WhatsApp-only, no app download
 - **Core value**: Peace of mind. Daily friction removed.
 
@@ -37,7 +37,7 @@ A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** �
 | Database | Supabase (free tier) | Easy setup, ~8,300 user ceiling on free plan |
 | Deployment | Railway | One-click deploy, no DevOps needed |
 | Clinic Finder | Google Maps Places API | Free tier covers thousands of calls/month |
-| Payments | Razorpay | India-native, ₹199/month subscription |
+| Payments | Razorpay | India-native, ₹299/month subscription |
 
 ### What We're NOT Using
 
@@ -84,16 +84,13 @@ A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** �
 - [ ] Return top 3 results with name, address, phone, rating
 - [ ] Test: "nearest orthopaedic clinic" → returns 3 clinics near saved address
 
-### Phase 4 — Voice Booking (Week 3–4)
-**UPDATE (June 2026): Voice calling is the ONLY clinic booking mechanism. ABDM not live. Twilio replaces Vapi (see research).**
-- [ ] Twilio Programmable Voice integration (telephony layer)
-- [ ] Select and test STT/TTS provider (2-3 options) for Hindi/Marathi quality — unverified across all platforms, must test with real calls
-- [ ] Agent places call to clinic phone number via Twilio
-- [ ] Conversation script (Hindi/Marathi/English): "Namaste, main [patient name] ki taraf se call kar raha hoon, appointment book karni thi [date/time] ke liye"
-- [ ] Handle: confirmed / no answer / alternative slot offered
-- [ ] Store confirmed appointment in Supabase
-- [ ] **Test early**: Place test call to a real clinic, validate Hindi/Marathi voice quality before committing further. See `/research/Voice_AI_5Platform_Comparison_June_2026.md`.
-- [ ] **Backup plan**: If Twilio integration proves too heavy, fall back to Retell AI (see research for trade-offs)
+### Phase 4 — Clinic Finder Result + Direct Call Fallback (Week 3–4)
+**UPDATE (June 2026): Voice booking deprioritised. Core problems: US +1 number looks like spam, AI voice causes receptionists to hang up, Twilio STT poor on Indian phone audio. Moving voice calling to Phase 9 for proper investment (Indian number + Deepgram STT + ElevenLabs/cloned voice). Phase 4 code exists in `src/routes/twilio.js` and `src/services/twilio.js` — do not delete.**
+- [x] Twilio Programmable Voice integration (code done, tested, deprioritised)
+- [x] Time preference collection before call
+- [x] Appointment status tracking in Supabase
+- [x] When user selects a clinic, send the clinic phone number + address directly
+- [ ] Test: select clinic → receive phone number + address on WhatsApp
 
 ### Phase 5 — Notifications (Week 4)
 - [ ] On appointment confirmation: WhatsApp to elderly user (confirmed details)
@@ -116,14 +113,19 @@ A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** �
 - [ ] Test: trigger SOS → verify family receives message within 10 seconds
 
 ### Phase 8 — Payments (Week 6)
-- [ ] Razorpay subscription integration (₹199/month)
+- [ ] Razorpay subscription integration (₹299/month)
 - [ ] 7-day free trial before payment required
 - [ ] Payment link sent via WhatsApp after onboarding
 - [ ] Subscription status check on every agent interaction
 - [ ] **Before launch**: Confirm Razorpay transaction fee % (currently 2–3% placeholder). See `/research/Razorpay_Subscriptions_June_2026.md`.
 - [ ] Test: complete payment flow, verify subscription activates
 
-### Phase 9 — Polish + Launch (Week 6–7)
+### Phase 9 — Voice Booking + Polish + Launch (Week 6–7)
+**Voice booking re-enters here with proper investment to fix the 3 root problems from Phase 4 testing.**
+- [ ] Get Indian Twilio number (regulatory docs: Aadhaar/PAN + business proof) — clinic sees local number, not spam US +1
+- [ ] Switch STT to Deepgram (better Hindi/Marathi on phone audio than Twilio's engine)
+- [ ] Switch TTS to ElevenLabs or cloned voice — human-sounding, not robotic
+- [ ] Re-test voice call with Indian number + new STT/TTS on real clinic
 - [ ] Multi-language: Hindi, Marathi, English detection and response
 - [ ] Error handling: what happens when clinic doesn't answer, API fails, etc.
 - [ ] **Structured logging**: log every incoming message, parsed intent, and outgoing reply to Supabase `message_logs` table — gives visibility into what's failing in production
@@ -142,9 +144,9 @@ All research archived in `/research/` with source citations. See `/research/READ
 
 | Finding | Decision | Impact |
 |---------|----------|--------|
-| **ABDM physical booking not live** | Removed from Phase 1–4 | Phase 4: voice-only, simpler |
-| **Twilio cheapest + best India access among 5 platforms** | Switched from Vapi to Twilio | Phase 4: Twilio telephony + own STT/TTS + Claude orchestration |
-| **Hindi/Marathi quality unverified for ALL voice platforms** | Test in Phase 4 regardless of vendor | Phase 4: real clinic call testing required before scaling |
+| **ABDM physical booking not live** | Removed from Phase 1–4 | Phase 4: clinic finder + direct call fallback |
+| **Twilio voice: US number = spam, AI voice = hang-up, STT = poor Indian audio** | Voice booking moved to Phase 9 | Phase 9: Indian number + Deepgram STT + ElevenLabs TTS |
+| **Hindi/Marathi quality unverified for ALL voice platforms** | Confirmed bad in Phase 4 testing | Phase 9: re-test with proper stack before scaling |
 | **WhatsApp test setup free** | Start Phase 1 today | $0 cost, 5 test numbers, no KYC needed |
 | **Razorpay fee % unconfirmed** | Use 2–3% placeholder | Confirm before Phase 8 launch |
 | **Supabase ~8,300 user ceiling** | Proceed on free tier | Well above V1 target of 500 users |
@@ -226,9 +228,9 @@ Claude API parses intent (language-agnostic)
 |----------|--------|--------|------|
 | Vertical vs super-agent | Vertical (health/elderly only) | Tata Neu failure, 100+ horizontal startup failures | June 2026 |
 | WhatsApp-first interface | WhatsApp only | Elderly users already have it, no download friction | June 2026 |
-| Voice booking mechanism | Twilio Programmable Voice + own STT/TTS | ABDM physical booking API not live; Twilio cheapest + best-verified India access among 5 platforms tested | June 2026 |
+| Voice booking mechanism | Deferred to Phase 9 | Tested in Phase 4: US +1 looks like spam, AI voice causes hang-ups, Twilio STT poor on Indian phone audio. Phase 9 will use Indian number + Deepgram + ElevenLabs | June 2026 |
 | Emergency dispatch | Coordination only (no autonomous dispatch) | Article 21 liability, Clinical Establishments Act | June 2026 |
-| Pricing | ₹199/month per family | WTP signal from earlier research | June 2024 |
+| Pricing | ₹299/month per family | WTP signal from earlier research | June 2024 |
 
 ---
 

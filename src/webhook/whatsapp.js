@@ -1,12 +1,36 @@
 import { Router } from 'express';
 import { config } from '../config/env.js';
-import { parseIntent } from '../services/claude.js';
+import { parseIntentSafe as parseIntent, parseAppointmentDetails } from '../services/claude.js';
+import { createAppointment, updateCareRecipient, acknowledgeMedicationLog, getOrCreateAccount, updateAccount, getConversationHistory, saveMessage, getPrimaryCareRecipient, logMessage, countUnknownIntentsLastHour } from '../services/supabase.js';
 import { sendTextMessage } from '../services/whatsapp.js';
-import { getOrCreateAccount, updateAccount, getConversationHistory, saveMessage, getPrimaryCareRecipient } from '../services/supabase.js';
 import { handleOnboarding } from '../services/onboarding.js';
+import { createSubscription, getPaymentLink } from '../services/razorpay.js';
 import { findNearbyClinics, findMoreClinics } from '../services/maps.js';
+import {
+  updateClinicInsight, updateMedicationInsight, updateLanguageInsight,
+  updateMessagePattern, updateAffirmativePattern, updateNegativePattern,
+  removeMedicationFromInsight, extractBaseName,
+} from '../services/intelligence.js';
 
 const router = Router();
+
+// Per-phone rate limit — 15 messages/min max to protect Claude API costs
+const phoneRateMap = new Map();
+
+function isPhoneRateLimited(phone) {
+  const now = Date.now();
+  const WINDOW_MS = 60 * 1000;
+  const MAX_PER_WINDOW = 15;
+  const record = phoneRateMap.get(phone) || { count: 0, windowStart: now };
+  if (now - record.windowStart > WINDOW_MS) {
+    phoneRateMap.set(phone, { count: 1, windowStart: now });
+    return false;
+  }
+  if (record.count >= MAX_PER_WINDOW) return true;
+  record.count++;
+  phoneRateMap.set(phone, record);
+  return false;
+}
 
 // Deduplicate Meta webhook retries — store processed message IDs for 60s
 const processedMessageIds = new Set();
@@ -47,37 +71,164 @@ router.post('/', async (req, res) => {
     if (processedMessageIds.has(message.id)) return;
     markProcessed(message.id);
 
-    const senderPhone = message.from;
+    const senderPhone = message.from.startsWith('+') ? message.from : `+${message.from}`;
+    if (!/^\+[1-9]\d{6,14}$/.test(senderPhone)) return;
+    if (isPhoneRateLimited(senderPhone)) {
+      console.warn(`[Rate limit] ${senderPhone.slice(0, 5)}*** exceeded 15 messages/min`);
+      return;
+    }
+
     const messageText = message.text.body;
 
-    const account = await getOrCreateAccount(senderPhone);
+    let account = await getOrCreateAccount(senderPhone);
     await saveMessage(senderPhone, 'user', messageText);
 
     let reply;
 
     if (!account.onboarding_complete) {
       reply = await handleOnboarding(account, messageText);
-    } else {
-      const recipient = await getPrimaryCareRecipient(senderPhone);
-      const lang = recipient?.preferred_language || 'english';
+      await sendTextMessage(senderPhone, reply);
+      await saveMessage(senderPhone, 'assistant', reply);
+      const updated = await getOrCreateAccount(senderPhone);
+      if (updated.onboarding_complete) {
+        await sendTrialStartedMessage(senderPhone);
+      }
+      return;
+    }
 
-      if (isMoreRequest(messageText)) {
-        reply = await handleMoreClinics(account, lang);
-      } else if (account.pending_action) {
-        reply = await handlePendingAction(account, messageText, lang, recipient);
+    const recipient = await getPrimaryCareRecipient(senderPhone);
+    const lang = recipient?.preferred_language || 'english';
+
+    if (isSOS(messageText)) {
+      reply = await handleSOS(account, lang, recipient);
+      logMessage({ accountPhone: senderPhone, incomingMessage: messageText, parsedIntent: 'sos', parsedLanguage: lang, parsedConfidence: 'high', outgoingReply: reply }).catch(() => {});
+    } else if (getSubscriptionStatus(account) === 'expired') {
+      reply = await getExpiredReply(account, lang);
+      logMessage({ accountPhone: senderPhone, incomingMessage: messageText, parsedIntent: 'expired_subscription', parsedLanguage: lang, parsedConfidence: 'high', outgoingReply: reply }).catch(() => {});
+    } else if (account.pending_action && !isNewCommandOverride(messageText, account)) {
+      reply = await handlePendingAction(account, messageText, lang, recipient);
+      logMessage({
+        accountPhone: senderPhone,
+        incomingMessage: messageText,
+        parsedIntent: account.pending_action,
+        parsedLanguage: lang,
+        parsedConfidence: 'high',
+        outgoingReply: reply,
+      }).catch(() => {});
+    } else if (isClinicSelection(messageText, account) && !isNewCommandOverride(messageText, account)) {
+      reply = await handleClinicSelection(account, messageText, lang, recipient);
+      logMessage({ accountPhone: senderPhone, incomingMessage: messageText, parsedIntent: 'clinic_selection', parsedLanguage: lang, parsedConfidence: 'high', outgoingReply: reply }).catch(() => {});
+    } else if (isMoreRequest(messageText)) {
+      reply = await handleMoreClinics(account, lang);
+      logMessage({ accountPhone: senderPhone, incomingMessage: messageText, parsedIntent: 'more_clinics', parsedLanguage: lang, parsedConfidence: 'high', outgoingReply: reply }).catch(() => {});
+    } else {
+      // Clear stale pending_action if user sent a new command that overrode it
+      if (account.pending_action && isNewCommandOverride(messageText, account)) {
+        await updateAccount(senderPhone, { pending_action: null, pending_data: null });
+        account = { ...account, pending_action: null, pending_data: null };
+      }
+
+      let parsedIntentResult = null;
+
+      if (isMedicationAck(messageText)) {
+        reply = await handleMedicationAck(account, lang);
+        if (!reply) {
+          const history = await getConversationHistory(senderPhone, 3);
+          parsedIntentResult = await parseIntent(messageText, history, recipient?.user_insights);
+          reply = await buildReply(parsedIntentResult, account, lang, recipient, messageText);
+        }
       } else {
         const history = await getConversationHistory(senderPhone, 3);
-        const parsedIntent = await parseIntent(messageText, history);
-        reply = await buildReply(parsedIntent, account, lang, recipient);
+        parsedIntentResult = await parseIntent(messageText, history, recipient?.user_insights);
+        reply = await buildReply(parsedIntentResult, account, lang, recipient, messageText);
       }
+
+      await sendTextMessage(senderPhone, reply);
+      await saveMessage(senderPhone, 'assistant', reply);
+
+      if (parsedIntentResult) {
+        updateMessagePattern(senderPhone, messageText, parsedIntentResult.intent).catch(() => {});
+        updateLanguageInsight(senderPhone, parsedIntentResult.language).catch(() => {});
+
+        logMessage({
+          accountPhone: senderPhone,
+          incomingMessage: messageText,
+          parsedIntent: parsedIntentResult.intent,
+          parsedLanguage: parsedIntentResult.language,
+          parsedConfidence: parsedIntentResult.confidence,
+          outgoingReply: reply,
+        }).catch(() => {});
+
+        if (parsedIntentResult.intent === 'unknown') {
+          countUnknownIntentsLastHour(senderPhone).then(count => {
+            if (count >= 5) {
+              console.error(`[ALERT] ${senderPhone.slice(0, 5)}*** has ${count} unknown intents in the last hour — possible parsing failure. Message length: ${messageText.length}`);
+            }
+          }).catch(() => {});
+        }
+      }
+      return;
     }
 
     await sendTextMessage(senderPhone, reply);
     await saveMessage(senderPhone, 'assistant', reply);
   } catch (err) {
     console.error('Webhook handler error:', err.message);
+    if (err.response?.data) console.error('API error detail:', JSON.stringify(err.response.data));
   }
 });
+
+// ─── New command override — breaks out of stale pending_action ────────────────
+
+function isNewCommandOverride(text, account) {
+  if (!account?.pending_action) return false;
+  // Only override if pending_action is NOT a numeric-reply state (clinic/medication in progress)
+  const numericStates = ['returning_clinic_choice', 'appointment_type', 'saved_doctor_choice', 'medication_conflict'];
+  if (!numericStates.includes(account.pending_action)) return false;
+  return /\b(book|appointment|doctor|clinic|डॉक्टर|अपॉइंटमेंट|medication|reminder|औषध|दवाई|cancel|रद्द|start over)\b/i.test(text.trim());
+}
+
+// ─── Clinic selection (user replies 1–5 after seeing clinic list) ─────────────
+
+function isClinicSelection(text, account) {
+  return account.pending_data?.clinics?.length > 0 && /^[1-5]$/.test(text.trim());
+}
+
+async function handleClinicSelection(account, messageText, lang, recipient) {
+  const index = parseInt(messageText.trim()) - 1;
+  const clinics = account.pending_data?.clinics || [];
+  const clinic = clinics[index];
+
+  if (!clinic) {
+    return {
+      english: 'Please reply with a number between 1 and 5.',
+      marathi: 'कृपया 1 ते 5 मधील संख्या उत्तर द्या.',
+      hindi:   'कृपया 1 से 5 के बीच संख्या में जवाब दें।',
+    }[lang];
+  }
+
+  if (!clinic.phone) {
+    return {
+      english: `${clinic.name} does not have a listed phone number. Please visit them directly.\n\n📍 ${clinic.address}`,
+      marathi: `${clinic.name} यांचा फोन नंबर उपलब्ध नाही. कृपया थेट भेट द्या.\n\n📍 ${clinic.address}`,
+      hindi:   `${clinic.name} का फ़ोन नंबर उपलब्ध नहीं है। कृपया सीधे जाएं।\n\n📍 ${clinic.address}`,
+    }[lang];
+  }
+
+  await updateAccount(account.account_phone, {
+    pending_action: 'awaiting_booking_confirmation',
+    pending_data: {
+      selected_clinic: clinic,
+      next_page_token: account.pending_data?.next_page_token || null,
+    },
+  });
+
+  return {
+    english: `Here's the number for *${clinic.name}*:\n\n📞 ${clinic.phone}\n\n📍 ${clinic.address}\n\nDid you book the appointment at *${clinic.name}*? Reply *Yes* when done.`,
+    marathi: `*${clinic.name}* यांचा नंबर:\n\n📞 ${clinic.phone}\n\n📍 ${clinic.address}\n\n*${clinic.name}* येथे appointment book झाली का? झाल्यावर *हो* म्हणा.`,
+    hindi:   `*${clinic.name}* का नंबर:\n\n📞 ${clinic.phone}\n\n📍 ${clinic.address}\n\n*${clinic.name}* में appointment book हो गई क्या? हो जाने पर *हाँ* कहें।`,
+  }[lang];
+}
 
 // ─── More clinics ─────────────────────────────────────────────────────────────
 
@@ -99,7 +250,10 @@ async function handleMoreClinics(account, lang) {
 
   const { clinics, nextPageToken } = await findMoreClinics(token);
   await updateAccount(account.account_phone, {
-    pending_data: nextPageToken ? { next_page_token: nextPageToken } : null,
+    pending_data: {
+      clinics,
+      next_page_token: nextPageToken || null,
+    },
   });
 
   return formatClinicList(clinics, null, lang, !!nextPageToken);
@@ -110,6 +264,83 @@ async function handleMoreClinics(account, lang) {
 async function handlePendingAction(account, messageText, lang, recipient) {
   const choice = messageText.trim().toLowerCase();
   const { pending_action, account_phone } = account;
+
+  if (pending_action === 'awaiting_booking_confirmation') {
+    const isYes = /^(yes|हो|ho|haan|हाँ|haan|ha|हा|ok|okay|confirmed|done|zali|झाली|book zali)$/i.test(choice);
+    const isNo  = /^(no|nahi|नाही|नहीं|cancel)$/i.test(choice);
+
+    if (isNo) {
+      updateNegativePattern(account_phone, choice).catch(() => {});
+      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      return {
+        english: 'No problem. Let me know if you need anything else.',
+        marathi: 'ठीक आहे. काही लागलं तर सांगा.',
+        hindi:   'कोई बात नहीं। कुछ चाहिए तो बताएं।',
+      }[lang];
+    }
+
+    if (!isYes) {
+      const clinic = account.pending_data?.selected_clinic;
+      return {
+        english: `Did you book the appointment at *${clinic?.name || 'the clinic'}*? Reply *Yes* or *No*.`,
+        marathi: `*${clinic?.name || 'क्लिनिक'}* येथे appointment book झाली का? *हो* किंवा *नाही* म्हणा.`,
+        hindi:   `*${clinic?.name || 'क्लिनिक'}* में appointment book हुई? *हाँ* या *नहीं* कहें।`,
+      }[lang];
+    }
+
+    updateAffirmativePattern(account_phone, choice).catch(() => {});
+    const clinic = account.pending_data?.selected_clinic;
+    await updateAccount(account_phone, {
+      pending_action: 'awaiting_appointment_time_input',
+      pending_data: account.pending_data,
+    });
+    return {
+      english: `Great! What time is the appointment at *${clinic?.name || 'the clinic'}*?`,
+      marathi: `छान! *${clinic?.name || 'क्लिनिक'}* येथे appointment किती वाजता आहे?`,
+      hindi:   `बढ़िया! *${clinic?.name || 'क्लिनिक'}* में appointment कितने बजे है?`,
+    }[lang];
+  }
+
+  if (pending_action === 'awaiting_appointment_time_input') {
+    const clinic = account.pending_data?.selected_clinic || {};
+    const details = await parseAppointmentDetails(`appointment at ${clinic.name || 'doctor'} at ${messageText.trim()}`);
+    const appointmentTime = details.time_display || messageText.trim();
+
+    await createAppointment({
+      account_phone,
+      recipient_name: recipient.recipient_name,
+      clinic_name: clinic.name || 'Doctor',
+      clinic_phone: clinic.phone || null,
+      status: 'confirmed',
+      appointment_date: details.date_display || null,
+      appointment_time: appointmentTime,
+      appointment_datetime: details.datetime_iso || null,
+    });
+
+    const familyContacts = recipient.family_contacts || [];
+    if (familyContacts.length > 0) {
+      const familyMsg = lang === 'hindi'
+        ? `📅 ${recipient.recipient_name} की appointment confirm हो गई।\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${details.date_display ? '\n📅 ' + details.date_display : ''}\n\n— CareProxy`
+        : `📅 ${recipient.recipient_name} यांची appointment confirm झाली.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${details.date_display ? '\n📅 ' + details.date_display : ''}\n\n— CareProxy`;
+      const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
+      await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg)));
+    }
+
+    await updateAccount(account_phone, {
+      pending_action: null,
+      pending_data: account.pending_data?.next_page_token
+        ? { next_page_token: account.pending_data.next_page_token }
+        : null,
+    });
+
+    if (clinic.name) updateClinicInsight(account_phone, clinic).catch(() => {});
+
+    return {
+      english: `✅ Appointment confirmed at *${clinic.name || 'doctor'}* at ${appointmentTime}.${familyContacts.length > 0 ? ' Your family has been notified.' : ''} I'll send reminders. 🔔`,
+      marathi: `✅ *${clinic.name || 'Doctor'}* येथे ${appointmentTime} ची appointment नोंदवली.${familyContacts.length > 0 ? ' कुटुंबाला कळवले.' : ''} Reminder येईल. 🔔`,
+      hindi:   `✅ *${clinic.name || 'Doctor'}* में ${appointmentTime} की appointment दर्ज हो गई।${familyContacts.length > 0 ? ' परिवार को बता दिया।' : ''} Reminder आएगा। 🔔`,
+    }[lang];
+  }
 
   if (pending_action === 'appointment_type') {
     if (choice === '1') {
@@ -147,6 +378,233 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     return await searchAndFormatClinics(recipient, messageText.trim(), lang);
   }
 
+  if (pending_action === 'awaiting_medication_names') {
+    // If user re-sent the trigger phrase instead of medicine names, re-ask
+    if (/\b(reminder|set medication|औषध आठवण|दवाई reminder)\b/i.test(messageText.trim())) {
+      return {
+        english: `Please tell me the medicine names, e.g. Amoxicillin, Metformin`,
+        marathi: `कृपया औषधांची नावे सांगा, उदा. Amoxicillin, Metformin`,
+        hindi:   `कृपया दवाइयों के नाम बताएं, जैसे Amoxicillin, Metformin`,
+      }[lang];
+    }
+    const medicines = messageText.split(/[,\n]|\band\b/i).map(m => m.trim()).filter(Boolean);
+    if (medicines.length === 0) {
+      return {
+        english: `Please tell me the medicine names, e.g. Amoxicillin, Metformin`,
+        marathi: `कृपया औषधांची नावे सांगा, उदा. Amoxicillin, Metformin`,
+        hindi:   `कृपया दवाइयों के नाम बताएं, जैसे Amoxicillin, Metformin`,
+      }[lang];
+    }
+    // Check for medication conflicts against learned active_medications
+    const activeMeds = recipient?.user_insights?.active_medications || [];
+    const conflictPair = medicines.reduce((found, newMed) => {
+      if (found) return found;
+      const newBase = extractBaseName(newMed);
+      const oldMed = activeMeds.find(m => extractBaseName(m) === newBase && m.toLowerCase() !== newMed.toLowerCase());
+      return oldMed ? { oldMed, newMed } : null;
+    }, null);
+
+    if (conflictPair) {
+      await updateAccount(account_phone, {
+        pending_action: 'medication_conflict',
+        pending_data: { conflict_old: conflictPair.oldMed, conflict_new: conflictPair.newMed, medicines, current_index: 0, collected_schedules: [] },
+      });
+      return {
+        english: `You're already taking *${conflictPair.oldMed}*. Has the doctor asked you to stop it and take *${conflictPair.newMed}* instead?\n\n1. Yes, stop ${conflictPair.oldMed}\n2. No, take both\n\nReply 1 or 2`,
+        marathi: `तुम्ही आधीच *${conflictPair.oldMed}* घेत आहात. Doctor नी ती बंद करून *${conflictPair.newMed}* घ्यायला सांगितली का?\n\n1. हो, ${conflictPair.oldMed} बंद करा\n2. नाही, दोन्ही घ्यायच्या\n\n1 किंवा 2 reply करा`,
+        hindi:   `आप पहले से *${conflictPair.oldMed}* ले रहे हैं। क्या Doctor ने इसे बंद करके *${conflictPair.newMed}* लेने को कहा?\n\n1. हाँ, ${conflictPair.oldMed} बंद करें\n2. नहीं, दोनों लेनी हैं\n\n1 या 2 reply करें`,
+      }[lang];
+    }
+
+    await updateAccount(account_phone, {
+      pending_action: 'awaiting_medication_frequency',
+      pending_data: { medicines, current_index: 0, collected_schedules: [] },
+    });
+    const isSelf = account.account_type === 'self';
+    return {
+      english: `How many times a day do ${isSelf ? 'you' : recipient?.recipient_name || 'they'} take *${medicines[0]}*?`,
+      marathi: isSelf
+        ? `तुम्ही *${medicines[0]}* दिवसातून किती वेळा घेता?`
+        : `${recipient?.recipient_name || 'ते'} *${medicines[0]}* दिवसातून किती वेळा घेतात?`,
+      hindi: isSelf
+        ? `आप *${medicines[0]}* दिन में कितनी बार लेते हैं?`
+        : `${recipient?.recipient_name || 'वे'} *${medicines[0]}* दिन में कितनी बार लेते हैं?`,
+    }[lang];
+  }
+
+  if (pending_action === 'awaiting_medication_frequency') {
+    if (!account.pending_data?.medicines) {
+      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      return {
+        english: 'Something went wrong. Please start again — what medications do you take?',
+        marathi: 'काहीतरी चुकले. पुन्हा सुरू करा — कोणती औषधे घेता?',
+        hindi:   'कुछ गलत हुआ। फिर से शुरू करें — कौन सी दवाइयाँ लेते हैं?',
+      }[lang];
+    }
+    const { medicines, current_index, collected_schedules } = account.pending_data;
+    const currentMedicine = medicines[current_index];
+    const freq = Math.min(Math.max(parseInt(messageText.trim()) || 1, 1), 3);
+    await updateAccount(account_phone, {
+      pending_action: 'awaiting_medication_times',
+      pending_data: { ...account.pending_data, current_frequency: freq },
+    });
+    return {
+      english: {
+        1: `At what time do you usually take *${currentMedicine}*?`,
+        2: `At what times do you usually take *${currentMedicine}*? (morning and night)`,
+        3: `At what times do you usually take *${currentMedicine}*? (morning, afternoon and night)`,
+      }[freq],
+      marathi: {
+        1: `*${currentMedicine}* साधारण कोणत्या वेळी घेता?`,
+        2: `*${currentMedicine}* साधारण कोणत्या वेळी घेता? (सकाळी आणि रात्री)`,
+        3: `*${currentMedicine}* साधारण कोणत्या वेळी घेता? (सकाळी, दुपारी आणि रात्री)`,
+      }[freq],
+      hindi: {
+        1: `*${currentMedicine}* आमतौर पर किस समय लेते हैं?`,
+        2: `*${currentMedicine}* आमतौर पर किस समय लेते हैं? (सुबह और रात)`,
+        3: `*${currentMedicine}* आमतौर पर किस समय लेते हैं? (सुबह, दोपहर और रात)`,
+      }[freq],
+    }[lang];
+  }
+
+  if (pending_action === 'awaiting_medication_times') {
+    if (!account.pending_data?.medicines) {
+      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      return {
+        english: 'Something went wrong. Please start again — what medications do you take?',
+        marathi: 'काहीतरी चुकले. पुन्हा सुरू करा — कोणती औषधे घेता?',
+        hindi:   'कुछ गलत हुआ। फिर से शुरू करें — कौन सी दवाइयाँ लेते हैं?',
+      }[lang];
+    }
+    const { medicines, current_index, collected_schedules, current_frequency } = account.pending_data;
+    const currentMedicine = medicines[current_index];
+    const freq = current_frequency || 1;
+    const times = parseTimeInput(messageText, freq);
+
+    if (times.length === 0) {
+      return {
+        english: `Couldn't understand the time. Please send like: ${freq === 1 ? '8am' : freq === 2 ? '8am and 9pm' : '8am, 1pm and 9pm'}`,
+        marathi: `वेळ समजली नाही. उदा: ${freq === 1 ? 'सकाळी 8' : freq === 2 ? 'सकाळी 8 आणि रात्री 9' : 'सकाळी 8, दुपारी 1 आणि रात्री 9'}`,
+        hindi:   `समय समझ नहीं आया। जैसे: ${freq === 1 ? '8am' : freq === 2 ? '8am और 9pm' : '8am, 1pm और 9pm'}`,
+      }[lang];
+    }
+
+    const updatedSchedules = [...collected_schedules, { name: currentMedicine, frequency: freq, times }];
+    const nextIndex = current_index + 1;
+
+    // More medicines to collect
+    if (nextIndex < medicines.length) {
+      await updateAccount(account_phone, {
+        pending_action: 'awaiting_medication_frequency',
+        pending_data: { medicines, current_index: nextIndex, collected_schedules: updatedSchedules },
+      });
+      return {
+        english: `Got it! Now, how many times a day do you take *${medicines[nextIndex]}*?`,
+        marathi: `ठीक आहे! आता, *${medicines[nextIndex]}* दिवसातून किती वेळा घेता?`,
+        hindi:   `ठीक है! अब, *${medicines[nextIndex]}* दिन में कितनी बार लेते हैं?`,
+      }[lang];
+    }
+
+    // All medicines collected — merge with existing schedule (don't overwrite)
+    const existingRecipient = await getPrimaryCareRecipient(account_phone);
+    const existingSchedule = existingRecipient?.medication_schedule || [];
+    const newNames = new Set(updatedSchedules.map(s => s.name.toLowerCase()));
+    const merged = [
+      ...existingSchedule.filter(s => !newNames.has(s.name.toLowerCase())),
+      ...updatedSchedules,
+    ];
+    await updateCareRecipient(account_phone, { medication_schedule: merged });
+    await updateAccount(account_phone, { pending_action: null, pending_data: null });
+    updateMedicationInsight(account_phone, merged).catch(() => {});
+
+    const familyContacts = recipient?.family_contacts || [];
+    if (familyContacts.length > 0) {
+      const summary = updatedSchedules.map(s =>
+        `• ${s.name}: ${s.times.map(displayTime).join(', ')} (${s.frequency}x daily)`
+      ).join('\n');
+      const familyMsg = lang === 'hindi'
+        ? `💊 ${recipient.recipient_name} की दवाइयों के reminders सेट हो गए।\n\n${summary}\n\n— CareProxy`
+        : `💊 ${recipient.recipient_name} यांच्या औषधांचे reminders सेट झाले.\n\n${summary}\n\n— CareProxy`;
+      const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
+      await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Send failed to ${p}:`, e.message))));
+    }
+
+    const confirmSummary = updatedSchedules.map(s =>
+      `💊 *${s.name}* — ${s.times.map(displayTime).join(', ')}`
+    ).join('\n');
+    return {
+      english: `✅ All reminders set!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nFamily has been informed.' : ''}`,
+      marathi: `✅ सर्व reminders सेट झाले!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nकुटुंबाला कळवले.' : ''}`,
+      hindi:   `✅ सभी reminders सेट हो गए!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nपरिवार को बता दिया।' : ''}`,
+    }[lang];
+  }
+
+  if (pending_action === 'returning_clinic_choice') {
+    const returningClinic = account.pending_data?.returning_clinic;
+
+    if (choice === '1') {
+      if (!returningClinic?.phone) {
+        await updateAccount(account_phone, { pending_action: null, pending_data: null });
+        return await searchAndFormatClinics(recipient, null, lang);
+      }
+      await updateAccount(account_phone, {
+        pending_action: 'awaiting_booking_confirmation',
+        pending_data: { selected_clinic: returningClinic },
+      });
+      return {
+        english: `Here's the number for *${returningClinic.name}*:\n\n📞 ${returningClinic.phone}\n\n📍 ${returningClinic.address}\n\nDid you book the appointment? Reply *Yes* when done.`,
+        marathi: `*${returningClinic.name}* यांचा नंबर:\n\n📞 ${returningClinic.phone}\n\n📍 ${returningClinic.address}\n\nAppointment book झाली का? झाल्यावर *हो* म्हणा.`,
+        hindi:   `*${returningClinic.name}* का नंबर:\n\n📞 ${returningClinic.phone}\n\n📍 ${returningClinic.address}\n\nAppointment book हुई क्या? हो जाने पर *हाँ* कहें।`,
+      }[lang];
+    }
+
+    await updateAccount(account_phone, { pending_action: null, pending_data: null });
+    return await searchAndFormatClinics(recipient, null, lang);
+  }
+
+  if (pending_action === 'medication_conflict') {
+    const { conflict_old, conflict_new, medicines, current_index, collected_schedules } = account.pending_data;
+
+    if (choice !== '1' && choice !== '2') {
+      return {
+        english: `Please reply with 1 or 2.`,
+        marathi: `कृपया 1 किंवा 2 reply करा.`,
+        hindi:   `कृपया 1 या 2 reply करें।`,
+      }[lang];
+    }
+
+    if (choice === '1') {
+      const existingRecipient = await getPrimaryCareRecipient(account_phone);
+      const oldBase = extractBaseName(conflict_old);
+      const updatedSchedule = (existingRecipient?.medication_schedule || []).filter(
+        m => extractBaseName(m.name) !== oldBase
+      );
+      const insights = existingRecipient?.user_insights || {};
+      const updatedMeds = (insights.active_medications || []).filter(m => extractBaseName(m) !== oldBase);
+      await updateCareRecipient(account_phone, {
+        medication_schedule: updatedSchedule,
+        user_insights: { ...insights, active_medications: updatedMeds },
+      });
+    }
+
+    await updateAccount(account_phone, {
+      pending_action: 'awaiting_medication_frequency',
+      pending_data: { medicines, current_index, collected_schedules },
+    });
+    const isSelf = account.account_type === 'self';
+    return choice === '1'
+      ? {
+          english: `Got it, *${conflict_old}* removed. How many times a day do ${isSelf ? 'you' : recipient?.recipient_name || 'they'} take *${medicines[current_index]}*?`,
+          marathi: `ठीक आहे, *${conflict_old}* बंद केली. तुम्ही *${medicines[current_index]}* दिवसातून किती वेळा घेता?`,
+          hindi:   `ठीक है, *${conflict_old}* बंद कर दी। आप *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`,
+        }[lang]
+      : {
+          english: `Understood, taking both. How many times a day do ${isSelf ? 'you' : recipient?.recipient_name || 'they'} take *${medicines[current_index]}*?`,
+          marathi: `समजलं, दोन्ही घ्यायच्या. तुम्ही *${medicines[current_index]}* दिवसातून किती वेळा घेता?`,
+          hindi:   `समझ गया, दोनों लेनी हैं। आप *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`,
+        }[lang];
+  }
+
   // Unknown pending state — reset and re-prompt
   await updateAccount(account_phone, { pending_action: null });
   return {
@@ -158,9 +616,27 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
 // ─── Intent reply builder ─────────────────────────────────────────────────────
 
-async function buildReply(parsed, account, lang, recipient) {
+async function buildReply(parsed, account, lang, recipient, messageText) {
   if (parsed.intent === 'book_appointment') {
     return await handleBookAppointment(parsed, account, lang, recipient);
+  }
+
+  if (parsed.intent === 'confirm_appointment') {
+    return await handleConfirmAppointment(messageText, account, lang, recipient);
+  }
+
+  if (parsed.intent === 'medication_reminder') {
+    await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names' });
+    const isSelf = account.account_type === 'self';
+    return {
+      english: `What medications do ${isSelf ? 'you' : recipient?.recipient_name || 'they'} currently take?`,
+      marathi: isSelf
+        ? `तुम्ही सध्या कोणती औषधे घेता?`
+        : `${recipient?.recipient_name || 'ते'} सध्या कोणती औषधे घेतात?`,
+      hindi: isSelf
+        ? `आप अभी कौन सी दवाइयाँ लेते हैं?`
+        : `${recipient?.recipient_name || 'वे'} अभी कौन सी दवाइयाँ लेते हैं?`,
+    }[lang];
   }
 
   const REPLIES = {
@@ -168,11 +644,6 @@ async function buildReply(parsed, account, lang, recipient) {
       english: 'Emergency noted! Alerting your family now.',
       marathi: 'आपत्कालीन परिस्थिती समजली! कुटुंबाला संदेश पाठवत आहोत.',
       hindi:   'आपातकाल समझ गए! परिवार को सूचित कर रहे हैं।',
-    },
-    medication_reminder: {
-      english: 'We will set your medication reminder.',
-      marathi: 'आम्ही तुमची औषधांची आठवण सेट करतो.',
-      hindi:   'दवाई का रिमाइंडर सेट कर देंगे।',
     },
     status_check: {
       english: 'Checking your appointment status.',
@@ -187,6 +658,38 @@ async function buildReply(parsed, account, lang, recipient) {
   };
 
   return (REPLIES[parsed.intent] ?? REPLIES.default)[lang];
+}
+
+async function handleConfirmAppointment(messageText, account, lang, recipient) {
+  const details = await parseAppointmentDetails(messageText);
+
+  await createAppointment({
+    account_phone: account.account_phone,
+    recipient_name: recipient.recipient_name,
+    clinic_name: details.clinic_name || 'Doctor',
+    clinic_phone: null,
+    status: 'confirmed',
+    appointment_date: details.date_display,
+    appointment_time: details.time_display,
+    appointment_datetime: details.datetime_iso,
+  });
+
+  const familyContacts = recipient.family_contacts || [];
+  if (familyContacts.length > 0) {
+    const familyMsg = {
+      marathi: `📅 ${recipient.recipient_name} यांची appointment confirm झाली.\n\n🏥 ${details.clinic_name || 'Doctor'}\n📅 ${details.date_display || ''}\n🕐 ${details.time_display || ''}\n\n— CareProxy`,
+      hindi:   `📅 ${recipient.recipient_name} की appointment confirm हो गई।\n\n🏥 ${details.clinic_name || 'Doctor'}\n📅 ${details.date_display || ''}\n🕐 ${details.time_display || ''}\n\n— CareProxy`,
+    }[lang] || `📅 ${recipient.recipient_name} has confirmed a doctor appointment at ${details.clinic_name || 'a clinic'} on ${details.date_display || ''} at ${details.time_display || ''}.`;
+
+    const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
+    await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg)));
+  }
+
+  return {
+    english: `✅ Got it! Appointment noted at ${details.clinic_name || 'doctor'}${details.date_display ? ' on ' + details.date_display : ''}${details.time_display ? ' at ' + details.time_display : ''}. Your family has been notified. I'll send you reminders. 🔔`,
+    marathi: `✅ नोंद केली! ${details.clinic_name || 'Doctor'} येथे${details.date_display ? ' ' + details.date_display + ' ला' : ''}${details.time_display ? ' ' + details.time_display : ''} appointment. कुटुंबाला कळवले. Reminder येईल. 🔔`,
+    hindi:   `✅ दर्ज हो गया! ${details.clinic_name || 'Doctor'} में${details.date_display ? ' ' + details.date_display + ' को' : ''}${details.time_display ? ' ' + details.time_display : ''} appointment। परिवार को बता दिया। Reminder आएगा। 🔔`,
+  }[lang];
 }
 
 async function handleBookAppointment(parsed, account, lang, recipient) {
@@ -205,9 +708,9 @@ async function handleBookAppointment(parsed, account, lang, recipient) {
   if (!appointmentType || appointmentType === 'null') {
     await updateAccount(account.account_phone, { pending_action: 'appointment_type' });
     return {
-      english: `Do you need a general check-up at a nearby clinic, or a specialist at a hospital?\n\n1. Nearby clinic (general)\n2. Specialist at hospital`,
-      marathi: `तुम्हाला जवळच्या क्लिनिकमध्ये सामान्य तपासणी हवी आहे, की हॉस्पिटलमध्ये तज्ज्ञ डॉक्टर?\n\n1. जवळचे क्लिनिक (सामान्य)\n2. हॉस्पिटलमध्ये तज्ज्ञ`,
-      hindi:   `क्या आपको नज़दीकी क्लिनिक में सामान्य जांच चाहिए, या अस्पताल में विशेषज्ञ?\n\n1. नज़दीकी क्लिनिक (सामान्य)\n2. अस्पताल में विशेषज्ञ`,
+      english: `Do you need a general check-up at a nearby clinic, or a specialist at a hospital?\n\n1. Nearby clinic (general)\n2. Specialist at hospital\n\nReply 1 or 2`,
+      marathi: `तुम्हाला जवळच्या क्लिनिकमध्ये सामान्य तपासणी हवी आहे, की हॉस्पिटलमध्ये तज्ज्ञ डॉक्टर?\n\n1. जवळचे क्लिनिक (सामान्य)\n2. हॉस्पिटलमध्ये तज्ज्ञ\n\n1 किंवा 2 reply करा`,
+      hindi:   `क्या आपको नज़दीकी क्लिनिक में सामान्य जांच चाहिए, या अस्पताल में विशेषज्ञ?\n\n1. नज़दीकी क्लिनिक (सामान्य)\n2. अस्पताल में विशेषज्ञ\n\n1 या 2 reply करें`,
     }[lang];
   }
 
@@ -221,6 +724,23 @@ async function handleBookAppointment(parsed, account, lang, recipient) {
     }[lang];
   }
 
+  // Returning clinic shortcut — if same clinic booked 2+ times
+  if (appointmentType === 'gp') {
+    const clinicHistory = recipient?.user_insights?.clinic_history || [];
+    const returningClinic = clinicHistory.find(c => c.count >= 2);
+    if (returningClinic) {
+      await updateAccount(account.account_phone, {
+        pending_action: 'returning_clinic_choice',
+        pending_data: { returning_clinic: returningClinic },
+      });
+      return {
+        english: `You've visited *${returningClinic.name}* before.\nWould you like to go there again?\n\n1. Yes, ${returningClinic.name}\n2. No, find a different clinic\n\nReply 1 or 2`,
+        marathi: `पूर्वी *${returningClinic.name}* येथे गेला होतात.\nपुन्हा तेथेच जायचे आहे का?\n\n1. हो, ${returningClinic.name}\n2. नाही, नवीन clinic शोधा\n\n1 किंवा 2 reply करा`,
+        hindi:   `पहले *${returningClinic.name}* में गए थे।\nवहीं जाना है?\n\n1. हाँ, ${returningClinic.name}\n2. नहीं, नई clinic खोजें\n\n1 या 2 reply करें`,
+      }[lang];
+    }
+  }
+
   // GP with saved doctor — offer choice
   const savedDoctors = recipient.saved_doctors || [];
   const hasValidSavedDoctor = savedDoctors.length > 0 && savedDoctors[0]?.info &&
@@ -230,9 +750,9 @@ async function handleBookAppointment(parsed, account, lang, recipient) {
     await updateAccount(account.account_phone, { pending_action: 'saved_doctor_choice' });
     const doctor = savedDoctors[0];
     return {
-      english: `Do you want to book at your saved doctor (${doctor.info}), or find a nearby clinic?\n\n1. My saved doctor\n2. Find nearby clinic`,
-      marathi: `तुमच्या नेहमीच्या डॉक्टरकडे (${doctor.info}) appointment बुक करायची आहे, की जवळचे क्लिनिक शोधायचे?\n\n1. माझे नेहमीचे डॉक्टर\n2. जवळचे क्लिनिक शोधा`,
-      hindi:   `क्या आप अपने पुराने डॉक्टर (${doctor.info}) के यहाँ appointment बुक करना चाहते हैं, या नज़दीकी क्लिनिक खोजें?\n\n1. मेरे पुराने डॉक्टर\n2. नज़दीकी क्लिनिक खोजें`,
+      english: `Do you want to book at your saved doctor (${doctor.info}), or find a nearby clinic?\n\n1. My saved doctor\n2. Find nearby clinic\n\nReply 1 or 2`,
+      marathi: `तुमच्या नेहमीच्या डॉक्टरकडे (${doctor.info}) appointment बुक करायची आहे, की जवळचे क्लिनिक शोधायचे?\n\n1. माझे नेहमीचे डॉक्टर\n2. जवळचे क्लिनिक शोधा\n\n1 किंवा 2 reply करा`,
+      hindi:   `क्या आप अपने पुराने डॉक्टर (${doctor.info}) के यहाँ appointment बुक करना चाहते हैं, या नज़दीकी क्लिनिक खोजें?\n\n1. मेरे पुराने डॉक्टर\n2. नज़दीकी क्लिनिक खोजें\n\n1 या 2 reply करें`,
     }[lang];
   }
 
@@ -242,7 +762,17 @@ async function handleBookAppointment(parsed, account, lang, recipient) {
 }
 
 async function searchAndFormatClinics(recipient, specialty, lang) {
-  const { clinics, nextPageToken } = await findNearbyClinics(recipient.home_address, specialty);
+  let clinics, nextPageToken;
+  try {
+    ({ clinics, nextPageToken } = await findNearbyClinics(recipient.home_address, specialty));
+  } catch (e) {
+    console.error('[Maps API error]', e.message);
+    return {
+      english: 'Sorry, I am having trouble finding clinics right now. Please try again in a few minutes.',
+      marathi: 'माफ करा, सध्या clinic शोधणे शक्य होत नाही. काही मिनिटांनी पुन्हा प्रयत्न करा.',
+      hindi:   'माफ़ करें, अभी clinic खोजना संभव नहीं है। कुछ मिनट बाद फिर कोशिश करें।',
+    }[lang];
+  }
 
   if (!clinics.length) {
     return {
@@ -253,7 +783,10 @@ async function searchAndFormatClinics(recipient, specialty, lang) {
   }
 
   await updateAccount(recipient.account_phone, {
-    pending_data: nextPageToken ? { next_page_token: nextPageToken } : null,
+    pending_data: {
+      clinics,
+      next_page_token: nextPageToken || null,
+    },
   });
 
   return formatClinicList(clinics, specialty, lang, !!nextPageToken);
@@ -286,6 +819,127 @@ function formatClinicList(clinics, specialty, lang, hasMore) {
   }[lang];
 
   return header + list + (hasMore ? footer : noMore);
+}
+
+// ─── SOS ─────────────────────────────────────────────────────────────────────
+
+function isSOS(text) {
+  return /\b(help|emergency|sos|madad|bachao|bachav|मदत|आपत्काल|मदद|बचाओ)\b/i.test(text.trim());
+}
+
+async function handleSOS(account, lang, recipient) {
+  const name = recipient?.recipient_name || 'Your family member';
+  const address = recipient?.home_address || 'their home';
+  const familyContacts = recipient?.family_contacts || [];
+  const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
+
+  if (familyContacts.length > 0) {
+    const alertMsg = lang === 'hindi'
+      ? `🆘 *${name}* को मदद चाहिए!\n\n📍 ${address}\n\nतुरंत संपर्क करें। — CareProxy`
+      : `🆘 *${name}* यांना मदत हवी आहे!\n\n📍 ${address}\n\nताबडतोब संपर्क करा. — CareProxy`;
+
+    const ambulanceMsg = lang === 'hindi'
+      ? `🚑 एम्बुलेंस नंबर:\n\n• सरकारी एम्बुलेंस: tel:108\n• पुलिस + आपातकाल: tel:112`
+      : `🚑 Ambulance नंबर:\n\n• सरकारी Ambulance: tel:108\n• पोलीस + आपत्काल: tel:112`;
+
+    const contacts = [...new Set(familyContacts.map(toE164))];
+    await Promise.all(contacts.flatMap(p => [
+      sendTextMessage(p, alertMsg).catch(e => console.error(`SOS alert failed to ${p}:`, e.message)),
+      sendTextMessage(p, ambulanceMsg).catch(e => console.error(`SOS ambulance failed to ${p}:`, e.message)),
+    ]));
+  }
+
+  return {
+    english: `🆘 Emergency!\n\nCall *108* now: tel:108\nOr dial *112*: tel:112\n\nYour family has been alerted.`,
+    marathi: `🆘 आपत्कालीन स्थिती!\n\n*108* वर तात्काळ फोन करा: tel:108\nकिंवा *112*: tel:112\n\nकुटुंबाला कळवले.`,
+    hindi:   `🆘 आपातकाल!\n\n*108* पर तुरंत फोन करें: tel:108\nया *112*: tel:112\n\nपरिवार को सूचित किया।`,
+  }[lang];
+}
+
+// ─── Medication helpers ───────────────────────────────────────────────────────
+
+function isMedicationAck(text) {
+  return /^(done|taken|yes|हो|ha|घेतलं|ghetal|le liya|ले लिया|ok|okay|हाँ|haan|लिया|घेतले)$/i.test(text.trim());
+}
+
+async function handleMedicationAck(account, lang) {
+  const acked = await acknowledgeMedicationLog(account.account_phone);
+  if (!acked) return null;
+  return {
+    english: '✅ Noted, medicines taken!',
+    marathi: '✅ नोंद झाली, औषधे घेतली!',
+    hindi:   '✅ दर्ज हो गया, दवाई ले ली!',
+  }[lang];
+}
+
+function displayTime(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const period = h < 12 ? 'AM' : 'PM';
+  const displayH = h % 12 || 12;
+  return `${displayH}${m ? ':' + String(m).padStart(2, '0') : ''}${period}`;
+}
+
+function parseTimeInput(text, frequency) {
+  const cleaned = text.replace(/सकाळी|दुपारी|संध्याकाळी|रात्री|subah|dopahar|raat|sandhya|वाजता|बजे/gi, ' ').trim();
+  const matches = [];
+  const re = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/gi;
+  let m;
+  while ((m = re.exec(cleaned)) !== null) {
+    let h = parseInt(m[1]);
+    const min = m[2] ? parseInt(m[2]) : 0;
+    const period = m[3]?.toLowerCase();
+    if (period === 'pm' && h < 12) h += 12;
+    else if (period === 'am' && h === 12) h = 0;
+    else if (!period && h >= 1 && h <= 6) h += 12; // 1–6 without AM/PM → PM
+    if (h >= 0 && h <= 23) matches.push(`${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`);
+  }
+  return [...new Set(matches)].slice(0, frequency);
+}
+
+// ─── Subscription helpers ─────────────────────────────────────────────────────
+
+function getSubscriptionStatus(account) {
+  if (account.subscription_status === 'active') return 'active';
+  const trialStart = new Date(account.created_at);
+  if (isNaN(trialStart.getTime())) return 'trial';
+  const trialEnd = new Date(trialStart);
+  trialEnd.setDate(trialEnd.getDate() + 7);
+  return new Date() < trialEnd ? 'trial' : 'expired';
+}
+
+async function sendTrialStartedMessage(phone) {
+  try {
+    const account = await getOrCreateAccount(phone);
+    if (account.razorpay_subscription_id) return;
+    const { id, paymentUrl } = await createSubscription(phone);
+    await updateAccount(phone, { razorpay_subscription_id: id });
+    const msg = `🎉 Your 7-day free trial has started!\n\nAfter your trial, subscribe for ₹299/month to keep using CareProxy:\n\n${paymentUrl}\n\n_No action needed right now. Enjoy your trial!_`;
+    await sendTextMessage(phone, msg);
+    await saveMessage(phone, 'assistant', msg);
+  } catch (e) {
+    console.error('Failed to send trial started message:', e.message);
+  }
+}
+
+async function getExpiredReply(account, lang) {
+  let paymentUrl = '';
+  try {
+    if (account.razorpay_subscription_id) {
+      paymentUrl = await getPaymentLink(account.razorpay_subscription_id);
+    } else {
+      const result = await createSubscription(account.account_phone);
+      await updateAccount(account.account_phone, { razorpay_subscription_id: result.id });
+      paymentUrl = result.paymentUrl;
+    }
+  } catch (e) {
+    console.error('Failed to get payment link for expired user:', e.message);
+  }
+  const linkLine = paymentUrl ? `\n\n${paymentUrl}` : '';
+  return {
+    english: `Your 7-day free trial has ended.\n\nSubscribe for ₹299/month to continue using CareProxy:${linkLine}`,
+    marathi: `तुमचा ७ दिवसांचा free trial संपला.\n\nCareProxy वापरणे सुरू ठेवण्यासाठी ₹299/महिना subscribe करा:${linkLine}`,
+    hindi:   `आपका ७ दिन का free trial खत्म हो गया।\n\n₹299/महीना subscribe करके CareProxy जारी रखें:${linkLine}`,
+  }[lang];
 }
 
 export default router;
