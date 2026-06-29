@@ -64,32 +64,19 @@ async function processReminders() {
     if (!recipient) continue;
 
     const lang = recipient.preferred_language === 'hindi' ? 'hindi' : 'marathi';
-    const contacts = [...new Set(
-      [appt.account_phone, ...(recipient.family_contacts || [])].map(toWhatsAppPhone)
-    )];
+    const userPhone = toWhatsAppPhone(appt.account_phone);
     const clinic = appt.clinic_name || 'Doctor';
     const name   = recipient.recipient_name;
     const dt     = appt.appointment_datetime;
 
-    const send = (msg) => Promise.all(
-      contacts.map(p => sendTextMessage(p, msg).catch(e => console.error(`Send failed to ${p.slice(0, 5)}***:`, e.message)))
-    );
-
-    if (!appt.reminder_evening_sent && h >= 12 && h <= 30) {
-      await updateAppointment(appt.id, { reminder_evening_sent: true });
-      const msg = lang === 'hindi'
-        ? `⏰ Reminder: ${name} की appointment ${whenHindi(dt)} ${hindiTime(dt)} ${clinic} में है।`
-        : `⏰ Reminder: ${name} यांची appointment ${whenMarathi(dt)} ${marathiTime(dt)} ${clinic} मध्ये आहे.`;
-      await send(msg);
-    }
-
-    if (!appt.reminder_2h_sent && h >= 1.75 && h <= 2.25) {
+    // Single reminder 1 hour before — sent only to the user, not family
+    if (!appt.reminder_2h_sent && h >= 0.75 && h <= 1.25) {
       await updateAppointment(appt.id, { reminder_2h_sent: true });
       const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(clinic + ', Pune')}`;
       const msg = lang === 'hindi'
-        ? `⏰ ${name} की appointment 2 घंटे में है — ${hindiTime(dt)} ${clinic}।\n\n📍 ${mapsUrl}`
-        : `⏰ ${name} यांची appointment 2 तासात आहे — ${marathiTime(dt)} ${clinic}.\n\n📍 ${mapsUrl}`;
-      await send(msg);
+        ? `⏰ Reminder: ${name} की appointment 1 घंटे में है — ${hindiTime(dt)} ${clinic}।\n\n📍 ${mapsUrl}`
+        : `⏰ Reminder: ${name} यांची appointment 1 तासात आहे — ${marathiTime(dt)} ${clinic}.\n\n📍 ${mapsUrl}`;
+      await sendTextMessage(userPhone, msg).catch(e => console.error(`Reminder failed to ${userPhone.slice(0, 5)}***:`, e.message));
     }
   }
 }

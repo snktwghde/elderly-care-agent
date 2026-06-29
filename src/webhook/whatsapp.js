@@ -133,9 +133,18 @@ router.post('/', async (req, res) => {
       if (isMedicationAck(messageText)) {
         reply = await handleMedicationAck(account, lang);
         if (!reply) {
-          const history = await getConversationHistory(senderPhone, 3);
-          parsedIntentResult = await parseIntent(messageText, history, recipient?.user_insights);
-          reply = await buildReply(parsedIntentResult, account, lang, recipient, messageText);
+          // "okay/done" with no pending medication — treat as acknowledgment, don't invoke Claude
+          if (/^(ok|okay|done|theek|accha|achha|alright|noted|ठीक|ठीक आहे)$/i.test(messageText.trim())) {
+            reply = {
+              english: 'Let me know if you need help with appointments, medication reminders, or emergencies.',
+              marathi: 'काही लागलं तर सांगा — appointment, औषध reminder किंवा आपत्काल.',
+              hindi:   'कुछ चाहिए तो बताएं — appointment, दवाई reminder या आपातकाल।',
+            }[lang];
+          } else {
+            const history = await getConversationHistory(senderPhone, 3);
+            parsedIntentResult = await parseIntent(messageText, history, recipient?.user_insights);
+            reply = await buildReply(parsedIntentResult, account, lang, recipient, messageText);
+          }
         }
       } else {
         const history = await getConversationHistory(senderPhone, 3);
@@ -208,10 +217,14 @@ async function handleClinicSelection(account, messageText, lang, recipient) {
   }
 
   if (!clinic.phone) {
+    await updateAccount(account.account_phone, {
+      pending_action: 'awaiting_booking_confirmation',
+      pending_data: { selected_clinic: clinic },
+    });
     return {
-      english: `${clinic.name} does not have a listed phone number. Please visit them directly.\n\n📍 ${clinic.address}`,
-      marathi: `${clinic.name} यांचा फोन नंबर उपलब्ध नाही. कृपया थेट भेट द्या.\n\n📍 ${clinic.address}`,
-      hindi:   `${clinic.name} का फ़ोन नंबर उपलब्ध नहीं है। कृपया सीधे जाएं।\n\n📍 ${clinic.address}`,
+      english: `${clinic.name} does not have a listed phone number. Please visit them directly.\n\n📍 ${clinic.address}\n\nDid you visit and book an appointment? Reply *Yes* to note the time.`,
+      marathi: `${clinic.name} यांचा फोन नंबर उपलब्ध नाही. कृपया थेट भेट द्या.\n\n📍 ${clinic.address}\n\nभेट दिली का? appointment वेळ नोंदवायची असेल तर *हो* म्हणा.`,
+      hindi:   `${clinic.name} का फ़ोन नंबर उपलब्ध नहीं है। कृपया सीधे जाएं।\n\n📍 ${clinic.address}\n\nगए और appointment ली? समय नोट करने के लिए *हाँ* कहें।`,
     }[lang];
   }
 
@@ -335,10 +348,16 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
     if (clinic.name) updateClinicInsight(account_phone, clinic).catch(() => {});
 
+    const medicationPrompt = {
+      english: `\n\nWould you also like to set medication reminders for ${recipient.recipient_name || 'them'}?`,
+      marathi: `\n\n${recipient.recipient_name || 'त्यांच्या'} औषधांचे reminders पण सेट करायचे आहेत का?`,
+      hindi:   `\n\n${recipient.recipient_name || 'उनके'} लिए दवाई reminders भी सेट करें?`,
+    }[lang];
+
     return {
-      english: `✅ Appointment confirmed at *${clinic.name || 'doctor'}* at ${appointmentTime}.${familyContacts.length > 0 ? ' Your family has been notified.' : ''} I'll send reminders. 🔔`,
-      marathi: `✅ *${clinic.name || 'Doctor'}* येथे ${appointmentTime} ची appointment नोंदवली.${familyContacts.length > 0 ? ' कुटुंबाला कळवले.' : ''} Reminder येईल. 🔔`,
-      hindi:   `✅ *${clinic.name || 'Doctor'}* में ${appointmentTime} की appointment दर्ज हो गई।${familyContacts.length > 0 ? ' परिवार को बता दिया।' : ''} Reminder आएगा। 🔔`,
+      english: `✅ Appointment confirmed at *${clinic.name || 'doctor'}* at ${appointmentTime}.${familyContacts.length > 0 ? ' Your family has been notified.' : ''} I'll remind you 1 hour before. 🔔${medicationPrompt}`,
+      marathi: `✅ *${clinic.name || 'Doctor'}* येथे ${appointmentTime} ची appointment नोंदवली.${familyContacts.length > 0 ? ' कुटुंबाला कळवले.' : ''} 1 तास आधी reminder येईल. 🔔${medicationPrompt}`,
+      hindi:   `✅ *${clinic.name || 'Doctor'}* में ${appointmentTime} की appointment दर्ज हो गई।${familyContacts.length > 0 ? ' परिवार को बता दिया।' : ''} 1 घंटे पहले reminder आएगा। 🔔${medicationPrompt}`,
     }[lang];
   }
 
@@ -532,10 +551,17 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const confirmSummary = updatedSchedules.map(s =>
       `💊 *${s.name}* — ${s.times.map(displayTime).join(', ')}`
     ).join('\n');
+
+    const closingMsg = {
+      english: `\n\nAll set! Message me anytime for appointments, medication reminders, or emergencies.`,
+      marathi: `\n\nसर्व तयार! कधीही appointment, औषध reminder किंवा आपत्काल — फक्त message करा.`,
+      hindi:   `\n\nसब तैयार है! कभी भी appointment, दवाई reminder या आपातकाल के लिए message करें।`,
+    }[lang];
+
     return {
-      english: `✅ All reminders set!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nFamily has been informed.' : ''}`,
-      marathi: `✅ सर्व reminders सेट झाले!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nकुटुंबाला कळवले.' : ''}`,
-      hindi:   `✅ सभी reminders सेट हो गए!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nपरिवार को बता दिया।' : ''}`,
+      english: `✅ All reminders set!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nFamily has been informed of the medication list.' : ''}${closingMsg}`,
+      marathi: `✅ सर्व reminders सेट झाले!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nकुटुंबाला औषधांची यादी कळवली.' : ''}${closingMsg}`,
+      hindi:   `✅ सभी reminders सेट हो गए!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nपरिवार को दवाइयों की सूची भेज दी।' : ''}${closingMsg}`,
     }[lang];
   }
 
@@ -663,6 +689,19 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
 async function handleConfirmAppointment(messageText, account, lang, recipient) {
   const details = await parseAppointmentDetails(messageText);
 
+  // No time provided — ask before saving or notifying anyone
+  if (!details.time_display) {
+    await updateAccount(account.account_phone, {
+      pending_action: 'awaiting_appointment_time_input',
+      pending_data: { selected_clinic: { name: details.clinic_name || 'Doctor' } },
+    });
+    return {
+      english: `Got it! What time is the appointment at *${details.clinic_name || 'the doctor'}*?`,
+      marathi: `ठीक आहे! *${details.clinic_name || 'Doctor'}* येथे appointment किती वाजता आहे?`,
+      hindi:   `ठीक है! *${details.clinic_name || 'Doctor'}* में appointment कितने बजे है?`,
+    }[lang];
+  }
+
   await createAppointment({
     account_phone: account.account_phone,
     recipient_name: recipient.recipient_name,
@@ -677,18 +716,24 @@ async function handleConfirmAppointment(messageText, account, lang, recipient) {
   const familyContacts = recipient.family_contacts || [];
   if (familyContacts.length > 0) {
     const familyMsg = {
-      marathi: `📅 ${recipient.recipient_name} यांची appointment confirm झाली.\n\n🏥 ${details.clinic_name || 'Doctor'}\n📅 ${details.date_display || ''}\n🕐 ${details.time_display || ''}\n\n— CareProxy`,
-      hindi:   `📅 ${recipient.recipient_name} की appointment confirm हो गई।\n\n🏥 ${details.clinic_name || 'Doctor'}\n📅 ${details.date_display || ''}\n🕐 ${details.time_display || ''}\n\n— CareProxy`,
-    }[lang] || `📅 ${recipient.recipient_name} has confirmed a doctor appointment at ${details.clinic_name || 'a clinic'} on ${details.date_display || ''} at ${details.time_display || ''}.`;
+      marathi: `📅 ${recipient.recipient_name} यांची appointment confirm झाली.\n\n🏥 ${details.clinic_name || 'Doctor'}${details.date_display ? '\n📅 ' + details.date_display : ''}\n🕐 ${details.time_display}\n\n— CareProxy`,
+      hindi:   `📅 ${recipient.recipient_name} की appointment confirm हो गई।\n\n🏥 ${details.clinic_name || 'Doctor'}${details.date_display ? '\n📅 ' + details.date_display : ''}\n🕐 ${details.time_display}\n\n— CareProxy`,
+    }[lang] || `📅 ${recipient.recipient_name} has confirmed a doctor appointment at ${details.clinic_name || 'a clinic'}${details.date_display ? ' on ' + details.date_display : ''} at ${details.time_display}.`;
 
     const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
     await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg)));
   }
 
+  const medicationPrompt = {
+    english: `\n\nWould you also like to set medication reminders for ${recipient.recipient_name || 'them'}?`,
+    marathi: `\n\n${recipient.recipient_name || 'त्यांच्या'} औषधांचे reminders पण सेट करायचे आहेत का?`,
+    hindi:   `\n\n${recipient.recipient_name || 'उनके'} लिए दवाई reminders भी सेट करें?`,
+  }[lang];
+
   return {
-    english: `✅ Got it! Appointment noted at ${details.clinic_name || 'doctor'}${details.date_display ? ' on ' + details.date_display : ''}${details.time_display ? ' at ' + details.time_display : ''}. Your family has been notified. I'll send you reminders. 🔔`,
-    marathi: `✅ नोंद केली! ${details.clinic_name || 'Doctor'} येथे${details.date_display ? ' ' + details.date_display + ' ला' : ''}${details.time_display ? ' ' + details.time_display : ''} appointment. कुटुंबाला कळवले. Reminder येईल. 🔔`,
-    hindi:   `✅ दर्ज हो गया! ${details.clinic_name || 'Doctor'} में${details.date_display ? ' ' + details.date_display + ' को' : ''}${details.time_display ? ' ' + details.time_display : ''} appointment। परिवार को बता दिया। Reminder आएगा। 🔔`,
+    english: `✅ Appointment noted at *${details.clinic_name || 'doctor'}*${details.date_display ? ' on ' + details.date_display : ''} at ${details.time_display}. Your family has been notified. I'll remind you 1 hour before. 🔔${medicationPrompt}`,
+    marathi: `✅ *${details.clinic_name || 'Doctor'}* येथे${details.date_display ? ' ' + details.date_display + ' ला' : ''} ${details.time_display} ची appointment नोंदवली. कुटुंबाला कळवले. 1 तास आधी reminder येईल. 🔔${medicationPrompt}`,
+    hindi:   `✅ *${details.clinic_name || 'Doctor'}* में${details.date_display ? ' ' + details.date_display + ' को' : ''} ${details.time_display} की appointment दर्ज हुई। परिवार को बता दिया। 1 घंटे पहले reminder आएगा। 🔔${medicationPrompt}`,
   }[lang];
 }
 
