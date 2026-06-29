@@ -218,13 +218,13 @@ async function handleClinicSelection(account, messageText, lang, recipient) {
 
   if (!clinic.phone) {
     await updateAccount(account.account_phone, {
-      pending_action: 'awaiting_booking_confirmation',
+      pending_action: 'awaiting_no_phone_clinic_type',
       pending_data: { selected_clinic: clinic },
     });
     return {
-      english: `${clinic.name} does not have a listed phone number. Please visit them directly.\n\n📍 ${clinic.address}\n\nDid you visit and book an appointment? Reply *Yes* to note the time.`,
-      marathi: `${clinic.name} यांचा फोन नंबर उपलब्ध नाही. कृपया थेट भेट द्या.\n\n📍 ${clinic.address}\n\nभेट दिली का? appointment वेळ नोंदवायची असेल तर *हो* म्हणा.`,
-      hindi:   `${clinic.name} का फ़ोन नंबर उपलब्ध नहीं है। कृपया सीधे जाएं।\n\n📍 ${clinic.address}\n\nगए और appointment ली? समय नोट करने के लिए *हाँ* कहें।`,
+      english: `${clinic.name} does not have a listed phone number.\n\n📍 ${clinic.address}\n\nDid you:\n1. Meet the doctor today (walk-in)\n2. Book an appointment for later\n\nReply 1 or 2`,
+      marathi: `${clinic.name} यांचा फोन नंबर उपलब्ध नाही.\n\n📍 ${clinic.address}\n\nतुम्ही:\n1. आज Doctor ला भेटलात (walk-in)\n2. नंतरसाठी appointment book केली\n\n1 किंवा 2 reply करा`,
+      hindi:   `${clinic.name} का फ़ोन नंबर उपलब्ध नहीं है।\n\n📍 ${clinic.address}\n\nक्या आपने:\n1. आज Doctor से मिले (walk-in)\n2. बाद के लिए appointment book की\n\n1 या 2 reply करें`,
     }[lang];
   }
 
@@ -277,6 +277,49 @@ async function handleMoreClinics(account, lang) {
 async function handlePendingAction(account, messageText, lang, recipient) {
   const choice = messageText.trim().toLowerCase();
   const { pending_action, account_phone } = account;
+
+  if (pending_action === 'awaiting_no_phone_clinic_type') {
+    const clinic = account.pending_data?.selected_clinic || {};
+    const clinicName = clinic.name || 'the clinic';
+    const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
+
+    if (choice === '1') {
+      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: null });
+
+      const familyContacts = recipient?.family_contacts || [];
+      if (familyContacts.length > 0) {
+        const name = recipient.recipient_name;
+        const familyMsg = lang === 'hindi'
+          ? `🏥 ${name} ने आज ${clinicName} में doctor से मिले। उनसे पूछें visit कैसी रही। — CareProxy`
+          : `🏥 ${name} आज ${clinicName} मध्ये doctor ला भेटले. त्यांना विचारा visit कशी गेली. — CareProxy`;
+        await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
+      }
+
+      return {
+        english: `Got it! Glad they saw the doctor.\n\nDid the doctor prescribe any new medication? If yes, tell me the medicine names and I'll set reminders.\n\nOr type *skip* to finish.`,
+        marathi: `ठीक आहे! Doctor ला भेटले हे छान झाले.\n\nDoctor ने नवीन औषधे सांगितली का? असल्यास औषधांची नावे सांगा, मी reminders लावतो.\n\nकिंवा *skip* म्हणा.`,
+        hindi:   `ठीक है! Doctor से मिले, अच्छा हुआ।\n\nDoctor ने कोई नई दवाई दी? अगर हाँ, तो दवाई के नाम बताएं, मैं reminder लगाता हूँ।\n\nया *skip* लिखें।`,
+      }[lang];
+    }
+
+    if (choice === '2') {
+      await updateAccount(account_phone, {
+        pending_action: 'awaiting_appointment_time_input',
+        pending_data: { selected_clinic: clinic },
+      });
+      return {
+        english: `Got it! What time is the appointment at *${clinicName}*?`,
+        marathi: `ठीक आहे! *${clinicName}* येथे appointment कधी आहे?`,
+        hindi:   `ठीक है! *${clinicName}* में appointment कितने बजे है?`,
+      }[lang];
+    }
+
+    return {
+      english: `Please reply *1* if you met the doctor today, or *2* if you booked an appointment for later.`,
+      marathi: `कृपया *1* म्हणा जर आज Doctor ला भेटलात, किंवा *2* जर नंतरसाठी appointment book केली.`,
+      hindi:   `कृपया *1* लिखें अगर आज Doctor से मिले, या *2* अगर बाद की appointment book की।`,
+    }[lang];
+  }
 
   if (pending_action === 'awaiting_booking_confirmation') {
     const isYes = /^(yes|हो|ho|haan|हाँ|haan|ha|हा|ok|okay|confirmed|done|zali|झाली|book zali)$/i.test(choice);
@@ -398,6 +441,14 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   }
 
   if (pending_action === 'awaiting_medication_names') {
+    if (/^(skip|नको|नहीं|no thanks|nope|later)$/i.test(messageText.trim())) {
+      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      return {
+        english: 'Okay! Message me anytime for appointments, medication reminders, or emergencies.',
+        marathi: 'ठीक आहे! appointments, औषध reminders किंवा emergency साठी कधीही message करा.',
+        hindi:   'ठीक है! appointments, दवाई reminders, या emergency के लिए कभी भी message करें।',
+      }[lang];
+    }
     // If user re-sent the trigger phrase instead of medicine names, re-ask
     if (/\b(reminder|set medication|औषध आठवण|दवाई reminder)\b/i.test(messageText.trim())) {
       return {
