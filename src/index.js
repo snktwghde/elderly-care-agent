@@ -2,10 +2,8 @@ import './config/env.js';
 import crypto from 'crypto';
 import express from 'express';
 import { rateLimit } from 'express-rate-limit';
-import twilio from 'twilio';
 import { config } from './config/env.js';
 import whatsappWebhook from './webhook/whatsapp.js';
-import twilioRoutes from './routes/twilio.js';
 import razorpayRoutes from './routes/razorpay.js';
 import { startReminderScheduler } from './services/reminders.js';
 
@@ -38,24 +36,13 @@ const webhookLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-function verifyTwilioSignature(req, res, next) {
-  const sig = req.headers['x-twilio-signature'];
-  const url = `${config.baseUrl}${req.originalUrl}`;
-  const valid = twilio.validateRequest(config.twilio.authToken, sig, url, req.body);
-  if (!valid) return res.status(401).end();
-  next();
-}
-
 app.use('/webhook/razorpay', webhookLimiter, express.raw({ type: 'application/json' }));
 app.use('/webhook', webhookLimiter, express.json({ verify: verifyMetaSignature }));
-app.use('/webhook/twilio', webhookLimiter, express.urlencoded({ extended: false }));
-app.use('/webhook/twilio', verifyTwilioSignature);
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'CareProxy' }));
 
 app.use('/webhook', whatsappWebhook);
-app.use('/webhook/twilio', twilioRoutes);
 app.use('/webhook/razorpay', razorpayRoutes);
 
 app.listen(config.port, () => {

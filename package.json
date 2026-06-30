@@ -17,8 +17,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^8.5.2",
     "node-cron": "^4.5.0",
-    "razorpay": "^2.9.6",
-    "twilio": "^6.0.2"
+    "razorpay": "^2.9.6"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

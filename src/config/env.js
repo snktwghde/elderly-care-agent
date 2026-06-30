@@ -9,9 +9,6 @@ const REQUIRED_VARS = [
   'SUPABASE_URL',
   'SUPABASE_SERVICE_KEY',
   'GOOGLE_MAPS_API_KEY',
-  'TWILIO_ACCOUNT_SID',
-  'TWILIO_AUTH_TOKEN',
-  'TWILIO_PHONE_NUMBER',
   'BASE_URL',
   'RAZORPAY_KEY_ID',
   'RAZORPAY_KEY_SECRET',
@@ -42,11 +39,6 @@ export const config = {
   },
   maps: {
     apiKey: process.env.GOOGLE_MAPS_API_KEY,
-  },
-  twilio: {
-    accountSid: process.env.TWILIO_ACCOUNT_SID,
-    authToken: process.env.TWILIO_AUTH_TOKEN,
-    phoneNumber: process.env.TWILIO_PHONE_NUMBER,
   },
   baseUrl: process.env.BASE_URL?.replace(/\/$/, ''),
   razorpay: {
