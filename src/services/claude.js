@@ -8,7 +8,7 @@ const SYSTEM_PROMPT = `You are a WhatsApp message parser for CareProxy, an elder
 
 Parse the incoming WhatsApp message and return ONLY valid JSON with this shape:
 {
-  "intent": "<one of: book_appointment | confirm_appointment | medication_reminder | sos | status_check | unknown>",
+  "intent": "<one of: book_appointment | confirm_appointment | medication_reminder | sos | status_check | setup_health_card | show_health_card | update_health_card | unknown>",
   "language": "<one of: hindi | marathi | english | mixed>",
   "confidence": "<one of: high | medium | low>",
   "details": {
@@ -16,7 +16,9 @@ Parse the incoming WhatsApp message and return ONLY valid JSON with this shape:
     "specialty": "<specialist type if appointment_type is specialist, else null>",
     "doctor_name": "<doctor name if mentioned, else null>",
     "date_hint": "<date or time hint if mentioned, else null>",
-    "medication_name": "<medication if mentioned, else null>"
+    "medication_name": "<medication if mentioned, else null>",
+    "health_card_field": "<blood_group|allergies|major_illnesses|surgeries|medical_history|null — which field the user wants to update>",
+    "health_card_value": "<the new value if user stated it, else null>"
   }
 }
 
@@ -41,6 +43,21 @@ Confirm appointment (user reporting they booked it themselves):
 - Hindi: "appointment book ho gayi", "doctor ne appointment diya"
 
 Status: "status", "confirm", "appointment hua", "appointment zali ka", "appointment confirmed"
+
+Health card — show (user wants to see their health card):
+- English: "health card", "medical card", "show health card", "show my health card", "medical summary", "my medical info"
+- Marathi: "health card dakhav", "maza health card", "health card pahije", "medical card"
+- Hindi: "health card dikhao", "medical card bhejo", "mera health card dikhao", "medical summary chahiye"
+
+Health card — setup (user wants to create/set up their health card):
+- "set up health card", "create health card", "setup health card", "health card banao"
+- "health card setup karo", "health card bana"
+
+Health card — update (user wants to update a specific field):
+- "update blood group", "change blood group", "add allergy", "new allergy", "add surgery", "surgery add karo"
+- "update medical history", "add illness", "blood group update karo", "allergy add karo"
+- Set health_card_field to: blood_group | allergies | major_illnesses | surgeries | medical_history
+- Set health_card_value to the stated value if mentioned (e.g., "update blood group to B+" → health_card_field: "blood_group", health_card_value: "B+")
 
 Language detection rules:
 - "marathi" if Devanagari Marathi script OR Latin words: "kara", "ahe", "aahe", "mala", "tumi", "zali", "zale", "pahije", "aahe"

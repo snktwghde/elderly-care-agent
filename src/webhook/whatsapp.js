@@ -5,6 +5,7 @@ import { createAppointment, updateCareRecipient, acknowledgeMedicationLog, getOr
 import { sendTextMessage } from '../services/whatsapp.js';
 import { handleOnboarding } from '../services/onboarding.js';
 import { createSubscription, getPaymentLink } from '../services/razorpay.js';
+import { generateHealthCard, sendHealthCardOffer, startHealthCardSetup, handleHealthCardSetup, startHealthCardFieldUpdate, handleHealthCardUpdate } from '../services/health-card.js';
 import { findNearbyClinics, findMoreClinics } from '../services/maps.js';
 import {
   updateClinicInsight, updateMedicationInsight, updateLanguageInsight,
@@ -34,6 +35,25 @@ function isPhoneRateLimited(phone) {
 
 // Deduplicate Meta webhook retries — store processed message IDs for 60s
 const processedMessageIds = new Set();
+
+const HEALTH_CARD_SETUP_STATES = [
+  'health_card_offer_pending',
+  'health_card_blood_group',
+  'health_card_allergies',
+  'health_card_illnesses',
+  'health_card_surgeries',
+  'health_card_history',
+];
+
+const HEALTH_CARD_UPDATE_STATES = [
+  'health_card_update_blood_group',
+  'health_card_update_allergies',
+  'health_card_update_illnesses',
+  'health_card_update_surgeries',
+  'health_card_update_history',
+];
+
+const HEALTH_CARD_FIELDS = ['blood_group', 'allergies', 'major_illnesses', 'surgeries', 'medical_history'];
 
 function markProcessed(messageId) {
   processedMessageIds.add(messageId);
@@ -92,6 +112,11 @@ router.post('/', async (req, res) => {
       const updated = await getOrCreateAccount(senderPhone);
       if (updated.onboarding_complete) {
         await sendTrialStartedMessage(senderPhone);
+        const newRecipient = await getPrimaryCareRecipient(senderPhone);
+        const offerLang = newRecipient?.preferred_language || 'english';
+        await sendHealthCardOffer(senderPhone, offerLang).catch(e =>
+          console.error('[Health card offer failed]', e.message)
+        );
       }
       return;
     }
@@ -109,7 +134,12 @@ router.post('/', async (req, res) => {
       reply = await handlePendingAction(account, messageText, lang, recipient);
       logMessage({
         accountPhone: senderPhone,
-        incomingMessage: messageText,
+        incomingMessage: (
+          HEALTH_CARD_SETUP_STATES.includes(account.pending_action) ||
+          HEALTH_CARD_UPDATE_STATES.includes(account.pending_action)
+        )
+          ? '[health card input]'
+          : messageText,
         parsedIntent: account.pending_action,
         parsedLanguage: lang,
         parsedConfidence: 'high',
@@ -165,7 +195,12 @@ router.post('/', async (req, res) => {
           parsedIntent: parsedIntentResult.intent,
           parsedLanguage: parsedIntentResult.language,
           parsedConfidence: parsedIntentResult.confidence,
-          outgoingReply: reply,
+          outgoingReply: (
+            parsedIntentResult.intent === 'show_health_card' ||
+            parsedIntentResult.intent === 'update_health_card'
+          )
+            ? '[health card operation]'
+            : reply,
         }).catch(() => {});
 
         if (parsedIntentResult.intent === 'unknown') {
@@ -682,6 +717,14 @@ async function handlePendingAction(account, messageText, lang, recipient) {
         }[lang];
   }
 
+  if (HEALTH_CARD_SETUP_STATES.includes(pending_action)) {
+    return await handleHealthCardSetup(account, messageText, lang, recipient);
+  }
+
+  if (HEALTH_CARD_UPDATE_STATES.includes(pending_action)) {
+    return await handleHealthCardUpdate(account, messageText, lang, recipient);
+  }
+
   // Unknown pending state — reset and re-prompt
   await updateAccount(account_phone, { pending_action: null });
   return {
@@ -713,6 +756,44 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
       hindi: isSelf
         ? `आप अभी कौन सी दवाइयाँ लेते हैं?`
         : `${recipient?.recipient_name || 'वे'} अभी कौन सी दवाइयाँ लेते हैं?`,
+    }[lang];
+  }
+
+  if (parsed.intent === 'show_health_card') {
+    if (!recipient) {
+      return {
+        english: 'I could not find your profile. Please complete onboarding first.',
+        marathi: 'तुमचे profile सापडले नाही. कृपया आधी onboarding पूर्ण करा.',
+        hindi:   'आपकी profile नहीं मिली। पहले onboarding पूरा करें।',
+      }[lang];
+    }
+    return generateHealthCard(recipient);
+  }
+
+  if (parsed.intent === 'setup_health_card') {
+    return await startHealthCardSetup(account.account_phone, lang);
+  }
+
+  if (parsed.intent === 'update_health_card') {
+    const field = parsed.details?.health_card_field;
+    const value = parsed.details?.health_card_value;
+
+    if (field && HEALTH_CARD_FIELDS.includes(field) && value) {
+      const stateKey = field === 'major_illnesses' ? 'illnesses' : field === 'medical_history' ? 'history' : field;
+      await updateAccount(account.account_phone, { pending_action: `health_card_update_${stateKey}` });
+      const fakeAccount = { ...account, pending_action: `health_card_update_${stateKey}` };
+      return await handleHealthCardUpdate(fakeAccount, value, lang, recipient);
+    }
+
+    if (field && HEALTH_CARD_FIELDS.includes(field)) {
+      const question = await startHealthCardFieldUpdate(account.account_phone, field, lang);
+      if (question) return question;
+    }
+
+    return {
+      english: `Which part of your health card would you like to update?\n\n• Blood group\n• Allergy (add)\n• Illness (add)\n• Surgery (add)\n• Medical history\n\nE.g., type *update blood group* or *add allergy Penicillin*`,
+      marathi: `तुमच्या health card मध्ये काय update करायचे आहे?\n\n• Blood group\n• Allergy (add)\n• Illness (add)\n• Surgery (add)\n• Medical history\n\nउदा. *blood group update करा* किंवा *allergy add करा Penicillin*`,
+      hindi:   `आपके health card में क्या update करना है?\n\n• Blood group\n• Allergy (add)\n• Illness (add)\n• Surgery (add)\n• Medical history\n\nजैसे *blood group update karo* या *allergy add karo Penicillin*`,
     }[lang];
   }
 
@@ -929,6 +1010,14 @@ async function handleSOS(account, lang, recipient) {
   const familyContacts = recipient?.family_contacts || [];
   const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
 
+  const hasHealthCard = !!(
+    recipient?.blood_group ||
+    (Array.isArray(recipient?.allergies) && recipient.allergies.length > 0) ||
+    (Array.isArray(recipient?.major_illnesses) && recipient.major_illnesses.length > 0) ||
+    (Array.isArray(recipient?.surgeries) && recipient.surgeries.length > 0) ||
+    recipient?.medical_history
+  );
+
   if (familyContacts.length > 0) {
     const alertMsg = lang === 'hindi'
       ? `🆘 *${name}* को मदद चाहिए!\n\n📍 ${address}\n\nतुरंत संपर्क करें। — CareProxy`
@@ -940,15 +1029,28 @@ async function handleSOS(account, lang, recipient) {
 
     const contacts = [...new Set(familyContacts.map(toE164))];
     await Promise.all(contacts.flatMap(p => [
-      sendTextMessage(p, alertMsg).catch(e => console.error(`SOS alert failed to ${p}:`, e.message)),
-      sendTextMessage(p, ambulanceMsg).catch(e => console.error(`SOS ambulance failed to ${p}:`, e.message)),
+      sendTextMessage(p, alertMsg).catch(e => console.error(`SOS alert failed to ${p.slice(0, 5)}***:`, e.message)),
+      sendTextMessage(p, ambulanceMsg).catch(e => console.error(`SOS ambulance failed to ${p.slice(0, 5)}***:`, e.message)),
     ]));
+
+    if (hasHealthCard) {
+      const healthCard = generateHealthCard(recipient);
+      await Promise.all(contacts.map(p =>
+        sendTextMessage(p, healthCard).catch(e => console.error(`SOS health card failed to ${p.slice(0, 5)}***:`, e.message))
+      ));
+    }
   }
 
+  const cardNote = !hasHealthCard ? {
+    english: '\n\nNote: Health card is not set up yet. Type *health card* to set it up.',
+    marathi: '\n\nटीप: Health card अजून सेट केलेले नाही. सेट करण्यासाठी *health card* टाइप करा.',
+    hindi:   '\n\nनोट: Health card अभी सेट नहीं है। सेट करने के लिए *health card* लिखें.',
+  }[lang] : '';
+
   return {
-    english: `🆘 Emergency!\n\nCall *108* now: tel:108\nOr dial *112*: tel:112\n\nYour family has been alerted.`,
-    marathi: `🆘 आपत्कालीन स्थिती!\n\n*108* वर तात्काळ फोन करा: tel:108\nकिंवा *112*: tel:112\n\nकुटुंबाला कळवले.`,
-    hindi:   `🆘 आपातकाल!\n\n*108* पर तुरंत फोन करें: tel:108\nया *112*: tel:112\n\nपरिवार को सूचित किया।`,
+    english: `🆘 Emergency!\n\nCall *108* now: tel:108\nOr dial *112*: tel:112\n\nYour family has been alerted.${cardNote}`,
+    marathi: `🆘 आपत्कालीन स्थिती!\n\n*108* वर तात्काळ फोन करा: tel:108\nकिंवा *112*: tel:112\n\nकुटुंबाला कळवले.${cardNote}`,
+    hindi:   `🆘 आपातकाल!\n\n*108* पर तुरंत फोन करें: tel:108\nया *112*: tel:112\n\nपरिवार को सूचित किया।${cardNote}`,
   }[lang];
 }
 
@@ -1009,7 +1111,7 @@ async function sendTrialStartedMessage(phone) {
     if (account.razorpay_subscription_id) return;
     const { id, paymentUrl } = await createSubscription(phone);
     await updateAccount(phone, { razorpay_subscription_id: id });
-    const msg = `🎉 Your 7-day free trial has started!\n\nAfter your trial, subscribe for ₹299/month to keep using CareProxy:\n\n${paymentUrl}\n\n_No action needed right now. Enjoy your trial!_`;
+    const msg = `🎉 Your 7-day free trial has started!\n\nAfter your trial, subscribe for ₹499/month to keep using CareProxy:\n\n${paymentUrl}\n\n_No action needed right now. Enjoy your trial!_`;
     await sendTextMessage(phone, msg);
     await saveMessage(phone, 'assistant', msg);
   } catch (e) {
@@ -1032,9 +1134,9 @@ async function getExpiredReply(account, lang) {
   }
   const linkLine = paymentUrl ? `\n\n${paymentUrl}` : '';
   return {
-    english: `Your 7-day free trial has ended.\n\nSubscribe for ₹299/month to continue using CareProxy:${linkLine}`,
-    marathi: `तुमचा ७ दिवसांचा free trial संपला.\n\nCareProxy वापरणे सुरू ठेवण्यासाठी ₹299/महिना subscribe करा:${linkLine}`,
-    hindi:   `आपका ७ दिन का free trial खत्म हो गया।\n\n₹299/महीना subscribe करके CareProxy जारी रखें:${linkLine}`,
+    english: `Your 7-day free trial has ended.\n\nSubscribe for ₹499/month to continue using CareProxy:${linkLine}`,
+    marathi: `तुमचा ७ दिवसांचा free trial संपला.\n\nCareProxy वापरणे सुरू ठेवण्यासाठी ₹499/महिना subscribe करा:${linkLine}`,
+    hindi:   `आपका ७ दिन का free trial खत्म हो गया।\n\n₹499/महीना subscribe करके CareProxy जारी रखें:${linkLine}`,
   }[lang];
 }
 
