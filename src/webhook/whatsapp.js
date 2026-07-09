@@ -143,7 +143,12 @@ router.post('/', async (req, res) => {
         parsedIntent: account.pending_action,
         parsedLanguage: lang,
         parsedConfidence: 'high',
-        outgoingReply: reply,
+        outgoingReply: (
+          HEALTH_CARD_SETUP_STATES.includes(account.pending_action) ||
+          HEALTH_CARD_UPDATE_STATES.includes(account.pending_action)
+        )
+          ? '[health card operation]'
+          : reply,
       }).catch(() => {});
     } else if (isClinicSelection(messageText, account) && !isNewCommandOverride(messageText, account)) {
       reply = await handleClinicSelection(account, messageText, lang, recipient);

@@ -209,8 +209,8 @@ export async function handleHealthCardUpdate(account, messageText, lang, recipie
   const isSkip = SKIP_RE.test(input);
 
   if (pending_action === 'health_card_update_blood_group') {
-    await updateAccount(account_phone, { pending_action: null });
     if (isSkip) {
+      await updateAccount(account_phone, { pending_action: null });
       return {
         english: `Blood group not changed.`,
         marathi: `Blood group बदललेला नाही.`,
@@ -219,12 +219,14 @@ export async function handleHealthCardUpdate(account, messageText, lang, recipie
     }
     const normalised = input.toUpperCase().replace(/\s+/g, '');
     if (!VALID_BLOOD_GROUPS.has(normalised)) {
+      // Leave pending_action intact so user can retry
       return {
         english: `Please enter a valid blood group (e.g., A+, B-, O+, AB+).`,
         marathi: `कृपया valid blood group टाका (उदा. A+, B-, O+, AB+).`,
         hindi:   `कृपया valid blood group डालें (जैसे A+, B-, O+, AB+).`,
       }[lang];
     }
+    await updateAccount(account_phone, { pending_action: null });
     await updateCareRecipient(account_phone, { blood_group: normalised });
     return {
       english: `✅ Blood group updated to *${normalised}*.`,
