@@ -145,9 +145,9 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
     }
     await updateAccount(account_phone, { pending_action: null });
     return {
-      english: `✅ Health card saved!\n\nType *health card* anytime to see it. During an SOS, it will be sent automatically to your family.`,
-      marathi: `✅ Health card जतन झाले!\n\nकेव्हाही *health card* टाइप करा पाहण्यासाठी. SOS वेळी ते आपोआप कुटुंबाला पाठवले जाईल.`,
-      hindi: `✅ Health card सेव हो गया!\n\nकभी भी *health card* लिखें देखने के लिए। SOS के समय यह automatically परिवार को भेजा जाएगा.`,
+      english: `✅ Health card saved!\n\nType *health card* anytime to see it. During an SOS, it will be sent automatically to your family.\n\nWhat's next: say *find doctor* to locate a nearby clinic, or *set medication reminders* to set medicine reminders.`,
+      marathi: `✅ Health card जतन झाले!\n\nकेव्हाही *health card* टाइप करा पाहण्यासाठी. SOS वेळी ते आपोआप कुटुंबाला पाठवले जाईल.\n\nपुढे काय: जवळचे clinic शोधण्यासाठी *find doctor* म्हणा, किंवा औषध reminders साठी *set medication reminders* म्हणा.`,
+      hindi: `✅ Health card सेव हो गया!\n\nकभी भी *health card* लिखें देखने के लिए। SOS के समय यह automatically परिवार को भेजा जाएगा.\n\nआगे क्या: नज़दीकी clinic खोजने के लिए *find doctor* कहें, या दवाई reminders के लिए *set medication reminders* लिखें.`,
     }[lang];
   }
 

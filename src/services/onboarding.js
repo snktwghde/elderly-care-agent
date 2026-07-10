@@ -2,7 +2,7 @@ import { updateAccount, upsertCareRecipient } from './supabase.js';
 
 const Q = {
   welcome:
-    `Welcome to CareProxy! 👋\n\nI help elderly people with doctor appointments, medication reminders, and emergency help — all on WhatsApp.\n\nLet's get you set up. Please choose your language / भाषा निवडा / अपनी भाषा चुनें:\n\n1. English\n2. मराठी\n3. हिंदी`,
+    `Welcome to CareProxy! 👋\n\nI help elderly people with locating nearby clinics for doctor appointments, medication reminders, and emergency help — all on WhatsApp.\n\nLet's get you set up. Please choose your language / भाषा निवडा / अपनी भाषा चुनें:\n\n1. English\n2. मराठी\n3. हिंदी`,
 
   account_type: {
     english: `Are you setting this up for yourself or for an elderly family member?\n\n1. For myself\n2. For an elderly family member`,
@@ -41,15 +41,15 @@ const Q = {
   },
 
   doctor: {
-    english: (name) => `Does ${name} have a regular doctor or clinic they prefer to visit?\n\nShare their name and number so we can book appointments there directly.\n\nIf not, reply *skip*`,
-    marathi: (name) => `${name} यांचे नेहमीचे डॉक्टर किंवा क्लिनिक आहे का?\n\nनाव व नंबर द्या, म्हणजे आम्ही तिथे थेट appointment बुक करू.\n\nनसल्यास *skip* टाइप करा.`,
-    hindi:   (name) => `क्या ${name} का कोई नियमित डॉक्टर या क्लिनिक है?\n\nनाम और नंबर दें ताकि हम सीधे वहाँ appointment बुक कर सकें.\n\nनहीं है तो *skip* लिखें.`,
+    english: (name) => `Does ${name} have a regular doctor or clinic they usually visit?\n\nShare the name and address — we'll show you their contact details when you need to book a visit.\n\nIf not, reply *skip*`,
+    marathi: (name) => `${name} यांचे नेहमीचे डॉक्टर किंवा क्लिनिक आहे का?\n\nनाव व पत्ता द्या — visit बुक करायची असेल तेव्हा आम्ही contact details दाखवू.\n\nनसल्यास *skip* टाइप करा.`,
+    hindi:   (name) => `क्या ${name} का कोई नियमित डॉक्टर या क्लिनिक है?\n\nनाम और पता दें — जब visit बुक करनी हो, हम contact details दिखाएंगे.\n\nनहीं है तो *skip* लिखें.`,
   },
 
   complete: {
-    english: (name) => `All set! CareProxy is ready for ${name}.\n\nYou can now:\n• Book a doctor appointment\n• Set medication reminders\n• Get emergency help\n\nJust send a message anytime.`,
-    marathi: (name) => `सर्व तयार! CareProxy ${name} यांच्यासाठी तयार आहे.\n\nआता तुम्ही:\n• Doctor appointment बुक करा\n• औषधांची आठवण सेट करा\n• आपत्कालीन मदत मिळवा\n\nकधीही संदेश करा.`,
-    hindi:   (name) => `सब तैयार! CareProxy ${name} के लिए तैयार है.\n\nअब आप:\n• Doctor appointment बुक करें\n• दवाई reminder सेट करें\n• आपातकालीन मदद लें\n\nकभी भी message करें.`,
+    english: (name) => `All set! CareProxy is ready for ${name}.\n\nYou can now:\n• Locate nearby clinics to book doctor appointment\n• Set medication reminders\n• Get emergency help\n\nJust send a message anytime.`,
+    marathi: (name) => `सर्व तयार! CareProxy ${name} यांच्यासाठी तयार आहे.\n\nआता तुम्ही:\n• Doctor appointment साठी जवळचे clinic शोधा\n• औषधांची आठवण सेट करा\n• आपत्कालीन मदत मिळवा\n\nकधीही संदेश करा.`,
+    hindi:   (name) => `सब तैयार! CareProxy ${name} के लिए तैयार है.\n\nअब आप:\n• Doctor appointment के लिए नज़दीकी clinic खोजें\n• दवाई reminder सेट करें\n• आपातकालीन मदद लें\n\nकभी भी message करें.`,
   },
 };
 
