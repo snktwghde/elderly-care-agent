@@ -233,6 +233,11 @@ function isNewCommandOverride(text, account) {
   if (!account?.pending_action) return false;
   const { pending_action } = account;
 
+  // Greetings always reset any pending state and show the menu
+  if (/^(hi|hello|hey|helo|namaste|नमस्ते|नमस्कार|हाय|hy|hii|helo)$/i.test(text.trim())) {
+    return true;
+  }
+
   // Time/date input states: only break out for medication-related commands, not appointment keywords
   if (pending_action === 'awaiting_appointment_time_input' || pending_action === 'awaiting_appointment_date_input') {
     return /\b(medication|reminder|औषध|दवाई|cancel|रद्द|start over)\b/i.test(text.trim());
