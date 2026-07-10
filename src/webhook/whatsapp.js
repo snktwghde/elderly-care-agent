@@ -443,7 +443,15 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   if (pending_action === 'awaiting_appointment_time_input') {
     const clinic = account.pending_data?.selected_clinic || {};
     const details = await parseAppointmentDetails(`appointment at ${clinic.name || 'doctor'} at ${messageText.trim()}`);
-    const appointmentTime = details.time_display || messageText.trim();
+    const appointmentTime = details.time_display;
+
+    if (!appointmentTime) {
+      return {
+        english: `I didn't catch that time. What time is the appointment at *${clinic.name || 'the clinic'}*?\n\nFor example: *3pm*, *10:30 AM*, *morning*.`,
+        marathi: `वेळ समजली नाही. *${clinic.name || 'clinic'}* येथे appointment कधी आहे?\n\nउदा: *3 वाजता*, *सकाळी 10:30*.`,
+        hindi:   `समय समझ नहीं आया। *${clinic.name || 'clinic'}* में appointment कितने बजे है?\n\nजैसे: *3 बजे*, *सुबह 10:30*.`,
+      }[lang];
+    }
 
     if (!details.date_display) {
       await updateAccount(account_phone, {
@@ -468,7 +476,15 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const pendingTime = account.pending_data?.pending_time || '';
     const combined = `appointment at ${clinic.name || 'doctor'} on ${messageText.trim()} at ${pendingTime}`;
     const details = await parseAppointmentDetails(combined);
-    const dateDisplay = details.date_display || messageText.trim();
+    const dateDisplay = details.date_display;
+
+    if (!dateDisplay) {
+      return {
+        english: `I didn't catch that date. What date is the appointment?\n\nYou can say *today*, *tomorrow*, or a date like *Monday* or *15 July*.`,
+        marathi: `तारीख समजली नाही. appointment कोणत्या दिवशी आहे?\n\n*आज*, *उद्या*, किंवा *सोमवार* / *15 जुलै* असे सांगा.`,
+        hindi:   `तारीख समझ नहीं आई। appointment किस दिन है?\n\n*आज*, *कल*, या *सोमवार* / *15 जुलाई* बताएं।`,
+      }[lang];
+    }
 
     return await confirmAndSaveAppointment({
       account, account_phone, recipient, lang, clinic,
