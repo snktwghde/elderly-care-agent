@@ -430,11 +430,11 @@ async function handlePendingAction(account, messageText, lang, recipient) {
           : `🏥 ${recipient.recipient_name} आज *${clinic?.name || 'doctor'}* मध्ये doctor ला भेटले. — CareProxy`;
         await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(() => {})));
       }
-      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: null });
       return {
-        english: `Got it! Glad they saw the doctor.\n\nIf the doctor prescribed new medicines, type *set medication reminders* to set reminders.`,
-        marathi: `ठीक आहे! Doctor ला भेटले, छान!\n\nDoctor ने नवीन औषधे दिली असल्यास, *set medication reminders* टाइप करा.`,
-        hindi:   `ठीक है! Doctor से मिले, अच्छा हुआ।\n\nDoctor ने नई दवाइयाँ दी हों तो *set medication reminders* लिखें।`,
+        english: `Got it! Glad they saw the doctor. 😊\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
+        marathi: `ठीक आहे! Doctor ला भेटले, छान! 😊\n\nDoctor ने नवीन औषधे दिली का? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
+        hindi:   `ठीक है! Doctor से मिले, अच्छा हुआ। 😊\n\nDoctor ने कोई नई दवाइयाँ दी हैं? नाम बताएं, मैं reminders सेट कर दूंगा।\n\nनहीं दी तो *skip* लिखें।`,
       }[lang];
     }
 
