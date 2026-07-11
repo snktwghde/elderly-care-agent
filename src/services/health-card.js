@@ -28,10 +28,10 @@ export function generateHealthCard(recipient) {
 
 export async function sendHealthCardOffer(phone, lang) {
   const msg = {
-    english: `Doctors often ask for current medications and medical history during visits — this lets you share it instantly.\n\nWould you like to set up your health card? (Takes about 5 minutes)\n\nReply *Yes* to set up or *No* to skip for now.`,
-    marathi: `डॉक्टरांना visit दरम्यान नेहमी medications आणि medical history विचारावी लागते — health card असल्यास ते लगेच share करता येते.\n\nतुमचे health card सेट करायचे आहे का? (सुमारे 5 मिनिटे)\n\n*हो* म्हणा सेट करण्यासाठी किंवा *नको* म्हणा नंतरसाठी.`,
-    hindi: `Doctors visit के दौरान हमेशा medications और medical history पूछते हैं — health card होने से वो तुरंत share होती है.\n\nक्या आप अपना health card सेट करना चाहते हैं? (लगभग 5 मिनट)\n\n*हाँ* कहें सेट करने के लिए या *नहीं* बाद के लिए.`,
-  }[lang] || `Doctors often ask for current medications and medical history during visits — this lets you share it instantly.\n\nWould you like to set up your health card? (Takes about 5 minutes)\n\nReply *Yes* to set up or *No* to skip for now.`;
+    english: `Would you like to set up your health card?\n\nDoctors often ask for current medications and medical history during visits — this lets you share it instantly. (Takes about 5 minutes)\n\nReply *Yes* to set up or *No* to skip for now.`,
+    marathi: `तुमचे health card सेट करायचे आहे का?\n\nडॉक्टरांना visit दरम्यान नेहमी medications आणि medical history विचारावी लागते — health card असल्यास ते लगेच share करता येते. (सुमारे 5 मिनिटे)\n\n*हो* म्हणा सेट करण्यासाठी किंवा *नको* म्हणा नंतरसाठी.`,
+    hindi: `क्या आप अपना health card सेट करना चाहते हैं?\n\nDoctors visit के दौरान हमेशा medications और medical history पूछते हैं — health card होने से वो तुरंत share होती है. (लगभग 5 मिनट)\n\n*हाँ* कहें सेट करने के लिए या *नहीं* बाद के लिए.`,
+  }[lang] || `Would you like to set up your health card?\n\nDoctors often ask for current medications and medical history during visits — this lets you share it instantly. (Takes about 5 minutes)\n\nReply *Yes* to set up or *No* to skip for now.`;
 
   await updateAccount(phone, { pending_action: 'health_card_offer_pending' });
   await sendTextMessage(phone, msg);

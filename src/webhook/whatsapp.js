@@ -386,12 +386,12 @@ async function handlePendingAction(account, messageText, lang, recipient) {
           : `🏥 ${name} आज ${clinicName} मध्ये doctor ला भेटले. त्यांना विचारा visit कशी गेली. — CareProxy`;
         await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
       }
-      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: null });
 
       return {
-        english: `Got it! Glad they saw the doctor.\n\nIf the doctor prescribed new medicines, type *set medication reminders* to set reminders.`,
-        marathi: `ठीक आहे! Doctor ला भेटले, छान!\n\nDoctor ने नवीन औषधे दिली असल्यास, *set medication reminders* टाइप करा.`,
-        hindi:   `ठीक है! Doctor से मिले, अच्छा हुआ।\n\nDoctor ने नई दवाइयाँ दी हों तो *set medication reminders* लिखें।`,
+        english: `Got it! Glad they saw the doctor. 😊\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
+        marathi: `ठीक आहे! Doctor ला भेटले, छान! 😊\n\nDoctor ने नवीन औषधे दिली का? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
+        hindi:   `ठीक है! Doctor से मिले, अच्छा हुआ। 😊\n\nDoctor ने कोई नई दवाइयाँ दी हैं? नाम बताएं, मैं reminders सेट कर दूंगा।\n\nनहीं दी तो *skip* लिखें।`,
       }[lang];
     }
 
@@ -821,6 +821,10 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 // ─── Intent reply builder ─────────────────────────────────────────────────────
 
 async function buildReply(parsed, account, lang, recipient, messageText) {
+  if (/^(find\s*(doctor|clinic|nearest)|nearest\s*(doctor|clinic)|doctor\s*near|clinic\s*near)/i.test(messageText.trim())) {
+    return await handleBookAppointment({ intent: 'book_appointment', details: {} }, account, lang, recipient);
+  }
+
   if (parsed.intent === 'book_appointment') {
     return await handleBookAppointment(parsed, account, lang, recipient);
   }

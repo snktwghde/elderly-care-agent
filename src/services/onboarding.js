@@ -135,6 +135,14 @@ export async function handleOnboarding(account, messageText) {
     }
 
     case 'recipient_phone': {
+      const allNums = messageText.match(/\d{10}/g) || [];
+      if (allNums.length > 1) {
+        return {
+          english: `Please enter just one WhatsApp number for ${name}.`,
+          marathi: `कृपया ${name} यांचा फक्त एकच WhatsApp नंबर टाका.`,
+          hindi:   `कृपया ${name} का सिर्फ एक WhatsApp नंबर दें.`,
+        }[lang];
+      }
       const recipientPhone = normalisePhone(messageText.trim());
       await updateAccount(account.account_phone, {
         onboarding_step: 'contacts',
