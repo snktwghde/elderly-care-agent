@@ -351,8 +351,8 @@ async function confirmAndSaveAppointment({ account, account_phone, recipient, la
 
   try {
     await updateAccount(account_phone, {
-      pending_action: null,
-      pending_data: account.pending_data?.next_page_token ? { next_page_token: account.pending_data.next_page_token } : null,
+      pending_action: 'awaiting_medication_names',
+      pending_data: { is_prescription: true },
     });
   } catch (e) {
     console.error('[confirmAndSaveAppointment] updateAccount failed:', e.message);
@@ -362,9 +362,9 @@ async function confirmAndSaveAppointment({ account, account_phone, recipient, la
 
   const dateStr = dateDisplay ? `\n📅 ${dateDisplay}` : '';
   return {
-    english: `✅ Appointment confirmed at *${clinic.name || 'doctor'}*!\n🕐 ${appointmentTime}${dateStr}${familyContacts.length > 0 ? '\nYour family has been notified. 👨‍👩‍👧' : ''} I'll remind you 1 hour before. 🔔\n\nWhen done with the appointment, come back to CareProxy to set the prescribed medication reminders. If no medicines given, say *skip*.`,
-    marathi: `✅ *${clinic.name || 'Doctor'}* येथे appointment नोंदवली!\n🕐 ${appointmentTime}${dateStr}${familyContacts.length > 0 ? '\nकुटुंबाला कळवले. 👨‍👩‍👧' : ''} 1 तास आधी reminder येईल. 🔔\n\nAppointment झाल्यावर CareProxy वर परत या आणि prescribed औषधांचे reminders सेट करा. औषधे नसल्यास *skip* म्हणा.`,
-    hindi:   `✅ *${clinic.name || 'Doctor'}* में appointment दर्ज हो गई!\n🕐 ${appointmentTime}${dateStr}${familyContacts.length > 0 ? '\nपरिवार को बता दिया। 👨‍👩‍👧' : ''} 1 घंटे पहले reminder आएगा। 🔔\n\nAppointment के बाद CareProxy पर वापस आएं और prescribed दवाइयों के reminders सेट करें। दवाइयाँ नहीं दी तो *skip* लिखें।`,
+    english: `✅ Appointment confirmed at *${clinic.name || 'doctor'}*!\n🕐 ${appointmentTime}${dateStr}${familyContacts.length > 0 ? '\nYour family has been notified. 👨‍👩‍👧' : ''} I'll remind you 1 hour before. 🔔\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
+    marathi: `✅ *${clinic.name || 'Doctor'}* येथे appointment नोंदवली!\n🕐 ${appointmentTime}${dateStr}${familyContacts.length > 0 ? '\nकुटुंबाला कळवले. 👨‍👩‍👧' : ''} 1 तास आधी reminder येईल. 🔔\n\nDoctor ने नवीन औषधे दिली का? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
+    hindi:   `✅ *${clinic.name || 'Doctor'}* में appointment दर्ज हो गई!\n🕐 ${appointmentTime}${dateStr}${familyContacts.length > 0 ? '\nपरिवार को बता दिया। 👨‍👩‍👧' : ''} 1 घंटे पहले reminder आएगा। 🔔\n\nDoctor ने कोई नई दवाइयाँ दी हैं? नाम बताएं, मैं reminders सेट कर दूंगा।\n\nनहीं दी तो *skip* लिखें।`,
   }[lang];
 }
 
@@ -1001,15 +1001,15 @@ async function handleConfirmAppointment(messageText, account, lang, recipient) {
     }[lang] || `📅 ${recipient.recipient_name} has confirmed a doctor appointment at ${details.clinic_name || 'a clinic'}${details.date_display ? ' on ' + details.date_display : ''} at ${details.time_display}.`;
 
     const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
-    await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg)));
+    await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
   }
 
-  await updateAccount(account.account_phone, { pending_action: null, pending_data: null });
+  await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
 
   return {
-    english: `✅ Appointment noted at *${details.clinic_name || 'doctor'}*${details.date_display ? ' on ' + details.date_display : ''} at ${details.time_display}. Your family has been notified. I'll remind you 1 hour before. 🔔\n\nWhen done with the appointment, come back to CareProxy to set the prescribed medication reminders. If no medicines given, say *skip*.`,
-    marathi: `✅ *${details.clinic_name || 'Doctor'}* येथे${details.date_display ? ' ' + details.date_display + ' ला' : ''} ${details.time_display} ची appointment नोंदवली. कुटुंबाला कळवले. 1 तास आधी reminder येईल. 🔔\n\nAppointment झाल्यावर CareProxy वर परत या आणि prescribed औषधांचे reminders सेट करा. औषधे नसल्यास *skip* म्हणा.`,
-    hindi:   `✅ *${details.clinic_name || 'Doctor'}* में${details.date_display ? ' ' + details.date_display + ' को' : ''} ${details.time_display} की appointment दर्ज हुई। परिवार को बता दिया। 1 घंटे पहले reminder आएगा। 🔔\n\nAppointment के बाद CareProxy पर वापस आएं और prescribed दवाइयों के reminders सेट करें। दवाइयाँ नहीं दी तो *skip* लिखें।`,
+    english: `✅ Appointment noted at *${details.clinic_name || 'doctor'}*${details.date_display ? ' on ' + details.date_display : ''} at ${details.time_display}. Your family has been notified. I'll remind you 1 hour before. 🔔\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
+    marathi: `✅ *${details.clinic_name || 'Doctor'}* येथे${details.date_display ? ' ' + details.date_display + ' ला' : ''} ${details.time_display} ची appointment नोंदवली. कुटुंबाला कळवले. 1 तास आधी reminder येईल. 🔔\n\nDoctor ने नवीन औषधे दिली का? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
+    hindi:   `✅ *${details.clinic_name || 'Doctor'}* में${details.date_display ? ' ' + details.date_display + ' को' : ''} ${details.time_display} की appointment दर्ज हुई। परिवार को बता दिया। 1 घंटे पहले reminder आएगा। 🔔\n\nDoctor ने कोई नई दवाइयाँ दी हैं? नाम बताएं, मैं reminders सेट कर दूंगा।\n\nनहीं दी तो *skip* लिखें।`,
   }[lang];
 }
 
