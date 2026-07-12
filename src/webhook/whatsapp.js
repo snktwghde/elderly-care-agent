@@ -349,10 +349,14 @@ async function confirmAndSaveAppointment({ account, account_phone, recipient, la
     await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg)));
   }
 
-  await updateAccount(account_phone, {
-    pending_action: null,
-    pending_data: account.pending_data?.next_page_token ? { next_page_token: account.pending_data.next_page_token } : null,
-  });
+  try {
+    await updateAccount(account_phone, {
+      pending_action: null,
+      pending_data: account.pending_data?.next_page_token ? { next_page_token: account.pending_data.next_page_token } : null,
+    });
+  } catch (e) {
+    console.error('[confirmAndSaveAppointment] updateAccount failed:', e.message);
+  }
 
   if (clinic.name) updateClinicInsight(account_phone, clinic).catch(() => {});
 
