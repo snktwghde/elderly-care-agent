@@ -346,7 +346,7 @@ async function confirmAndSaveAppointment({ account, account_phone, recipient, la
       ? `📅 ${recipient.recipient_name} की appointment confirm हो गई.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${dateDisplay ? '\n📅 ' + dateDisplay : ''}\n\n— CareProxy`
       : `📅 ${recipient.recipient_name} यांची appointment confirm झाली.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${dateDisplay ? '\n📅 ' + dateDisplay : ''}\n\n— CareProxy`;
     const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
-    await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg)));
+    await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
   }
 
   try {
