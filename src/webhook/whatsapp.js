@@ -351,9 +351,7 @@ async function confirmAndSaveAppointment({ account, account_phone, recipient, la
 
   await updateAccount(account_phone, {
     pending_action: 'awaiting_medication_names',
-    pending_data: account.pending_data?.next_page_token
-      ? { next_page_token: account.pending_data.next_page_token }
-      : null,
+    pending_data: { is_prescription: true, ...(account.pending_data?.next_page_token ? { next_page_token: account.pending_data.next_page_token } : {}) },
   });
 
   if (clinic.name) updateClinicInsight(account_phone, clinic).catch(() => {});
@@ -386,7 +384,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
           : `🏥 ${name} आज ${clinicName} मध्ये doctor ला भेटले. त्यांना विचारा visit कशी गेली. — CareProxy`;
         await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
       }
-      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: null });
+      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
 
       return {
         english: `Got it! Glad they saw the doctor. 😊\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
@@ -430,7 +428,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
           : `🏥 ${recipient.recipient_name} आज *${clinic?.name || 'doctor'}* मध्ये doctor ला भेटले. — CareProxy`;
         await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(() => {})));
       }
-      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: null });
+      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
       return {
         english: `Got it! Glad they saw the doctor. 😊\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
         marathi: `ठीक आहे! Doctor ला भेटले, छान! 😊\n\nDoctor ने नवीन औषधे दिली का? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
@@ -604,12 +602,17 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }[lang];
     }
 
+    const isPrescription = account.pending_data?.is_prescription || false;
     await updateAccount(account_phone, {
       pending_action: 'awaiting_medication_frequency',
-      pending_data: { medicines, current_index: 0, collected_schedules: [] },
+      pending_data: { medicines, current_index: 0, collected_schedules: [], is_prescription: isPrescription },
     });
     const isSelf = account.account_type === 'self';
-    return {
+    return isPrescription ? {
+      english: `How many times a day has the doctor advised to take *${medicines[0]}*?`,
+      marathi: `Doctor ने *${medicines[0]}* दिवसातून किती वेळा घेण्यास सांगितले?`,
+      hindi:   `Doctor ने *${medicines[0]}* दिन में कितनी बार लेने की सलाह दी?`,
+    }[lang] : {
       english: `How many times a day do ${isSelf ? 'you' : recipient?.recipient_name || 'they'} take *${medicines[0]}*?`,
       marathi: isSelf
         ? `तुम्ही *${medicines[0]}* दिवसातून किती वेळा घेता?`
@@ -636,7 +639,24 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       pending_action: 'awaiting_medication_times',
       pending_data: { ...account.pending_data, current_frequency: freq },
     });
-    return {
+    const isPrescription = account.pending_data?.is_prescription || false;
+    return isPrescription ? {
+      english: {
+        1: `At what time would you prefer to take *${currentMedicine}*? (e.g. 10am)`,
+        2: `At what time would you prefer to take *${currentMedicine}*? (e.g. 10am, 9pm)`,
+        3: `At what time would you prefer to take *${currentMedicine}*? (e.g. 8am, 1pm, 9pm)`,
+      }[freq],
+      marathi: {
+        1: `*${currentMedicine}* कधी घ्यायचे? (उदा. सकाळी 10)`,
+        2: `*${currentMedicine}* कधी घ्यायचे? (उदा. सकाळी 10, रात्री 9)`,
+        3: `*${currentMedicine}* कधी घ्यायचे? (उदा. सकाळी 8, दुपारी 1, रात्री 9)`,
+      }[freq],
+      hindi: {
+        1: `*${currentMedicine}* कब लेना है? (जैसे 10am)`,
+        2: `*${currentMedicine}* कब-कब लेना है? (जैसे 10am, 9pm)`,
+        3: `*${currentMedicine}* कब-कब लेना है? (जैसे 8am, 1pm, 9pm)`,
+      }[freq],
+    }[lang] : {
       english: {
         1: `At what time do you usually take *${currentMedicine}*?`,
         2: `At what times do you usually take *${currentMedicine}*? (morning and night)`,
@@ -681,12 +701,17 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const nextIndex = current_index + 1;
 
     // More medicines to collect
+    const isPrescription = account.pending_data?.is_prescription || false;
     if (nextIndex < medicines.length) {
       await updateAccount(account_phone, {
         pending_action: 'awaiting_medication_frequency',
-        pending_data: { medicines, current_index: nextIndex, collected_schedules: updatedSchedules },
+        pending_data: { medicines, current_index: nextIndex, collected_schedules: updatedSchedules, is_prescription: isPrescription },
       });
-      return {
+      return isPrescription ? {
+        english: `Got it! How many times a day has the doctor advised to take *${medicines[nextIndex]}*?`,
+        marathi: `ठीक आहे! Doctor ने *${medicines[nextIndex]}* दिवसातून किती वेळा घेण्यास सांगितले?`,
+        hindi:   `ठीक है! Doctor ने *${medicines[nextIndex]}* दिन में कितनी बार लेने की सलाह दी?`,
+      }[lang] : {
         english: `Got it! Now, how many times a day do you take *${medicines[nextIndex]}*?`,
         marathi: `ठीक आहे! आता, *${medicines[nextIndex]}* दिवसातून किती वेळा घेता?`,
         hindi:   `ठीक है! अब, *${medicines[nextIndex]}* दिन में कितनी बार लेते हैं?`,
@@ -702,7 +727,6 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       ...updatedSchedules,
     ];
     await updateCareRecipient(account_phone, { medication_schedule: merged });
-    await updateAccount(account_phone, { pending_action: null, pending_data: null });
     updateMedicationInsight(account_phone, merged).catch(() => {});
 
     const familyContacts = recipient?.family_contacts || [];
@@ -721,16 +745,48 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       `💊 *${s.name}* — ${s.times.map(displayTime).join(', ')}`
     ).join('\n');
 
+    const familyNote = familyContacts.length > 0 ? { english: '\n\nFamily has been informed.', marathi: '\n\nकुटुंबाला यादी कळवली.', hindi: '\n\nपरिवार को सूची भेज दी।' }[lang] : '';
+
+    if (isPrescription) {
+      const isSelf = account.account_type === 'self';
+      const recipientName = recipient?.recipient_name || (isSelf ? 'you' : 'they');
+      await updateAccount(account_phone, { pending_action: 'awaiting_post_prescription_prompt', pending_data: null });
+      return {
+        english: `✅ Prescription reminders set!\n\n${confirmSummary}${familyNote}\n\nWould you also like to add any other regular medications ${isSelf ? 'you take' : `${recipientName} takes`} daily? Reply *Yes* or *No*.`,
+        marathi: `✅ Prescription reminders सेट झाले!\n\n${confirmSummary}${familyNote}\n\n${isSelf ? 'तुम्ही' : recipientName} नियमित आणखी औषधे घेतात का? त्यांचेही reminders सेट करायचे आहेत का? *हो* किंवा *नाही* म्हणा.`,
+        hindi:   `✅ Prescription reminders सेट हो गए!\n\n${confirmSummary}${familyNote}\n\n${isSelf ? 'आप' : recipientName} और कोई regular दवाइयाँ लेते हैं? उनके reminders भी लगाने हैं? *हाँ* या *नहीं* कहें।`,
+      }[lang];
+    }
+
+    await updateAccount(account_phone, { pending_action: null, pending_data: null });
     const closingMsg = {
       english: `\n\nAll set! Message me anytime for appointments, medication reminders, or emergencies.`,
       marathi: `\n\nसर्व तयार! कधीही appointment, औषध reminder किंवा आपत्काल — फक्त message करा.`,
       hindi:   `\n\nसब तैयार है! कभी भी appointment, दवाई reminder या आपातकाल के लिए message करें।`,
     }[lang];
-
     return {
-      english: `✅ All reminders set!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nFamily has been informed of the medication list.' : ''}${closingMsg}`,
-      marathi: `✅ सर्व reminders सेट झाले!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nकुटुंबाला औषधांची यादी कळवली.' : ''}${closingMsg}`,
-      hindi:   `✅ सभी reminders सेट हो गए!\n\n${confirmSummary}${familyContacts.length > 0 ? '\n\nपरिवार को दवाइयों की सूची भेज दी।' : ''}${closingMsg}`,
+      english: `✅ All reminders set!\n\n${confirmSummary}${familyNote}${closingMsg}`,
+      marathi: `✅ सर्व reminders सेट झाले!\n\n${confirmSummary}${familyNote}${closingMsg}`,
+      hindi:   `✅ सभी reminders सेट हो गए!\n\n${confirmSummary}${familyNote}${closingMsg}`,
+    }[lang];
+  }
+
+  if (pending_action === 'awaiting_post_prescription_prompt') {
+    const isYes = /^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|sure|हां|bilkul)$/i.test(choice);
+    if (isYes) {
+      const isSelf = account.account_type === 'self';
+      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: false } });
+      return {
+        english: `What other medications does ${isSelf ? 'you take' : `${recipient?.recipient_name || 'they'} take`} regularly? Tell me the names.`,
+        marathi: `${isSelf ? 'तुम्ही' : recipient?.recipient_name || 'ते'} नियमित आणखी कोणती औषधे घेतात? नावे सांगा.`,
+        hindi:   `${isSelf ? 'आप' : recipient?.recipient_name || 'वे'} नियमित और कौन सी दवाइयाँ लेते हैं? नाम बताएं।`,
+      }[lang];
+    }
+    await updateAccount(account_phone, { pending_action: null, pending_data: null });
+    return {
+      english: `All set! Message me anytime for appointments, medication reminders, or emergencies.`,
+      marathi: `सर्व तयार! कधीही appointment, औषध reminder किंवा आपत्काल — फक्त message करा.`,
+      hindi:   `सब तैयार है! कभी भी appointment, दवाई reminder या आपातकाल के लिए message करें।`,
     }[lang];
   }
 
@@ -944,7 +1000,7 @@ async function handleConfirmAppointment(messageText, account, lang, recipient) {
     await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg)));
   }
 
-  await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names' });
+  await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
 
   return {
     english: `✅ Appointment noted at *${details.clinic_name || 'doctor'}*${details.date_display ? ' on ' + details.date_display : ''} at ${details.time_display}. Your family has been notified. I'll remind you 1 hour before. 🔔\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
