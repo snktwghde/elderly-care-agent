@@ -60,11 +60,11 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
 
     if (isYes) return await startHealthCardSetup(account_phone, lang);
 
-    await updateAccount(account_phone, { pending_action: null });
+    await updateAccount(account_phone, { pending_action: 'health_card_declined_next_step' });
     return {
-      english: `No problem. You can set it up later — just type *health card* anytime.`,
-      marathi: `ठीक आहे. नंतर केव्हाही *health card* टाइप करा.`,
-      hindi: `कोई बात नहीं। बाद में कभी भी *health card* लिखें.`,
+      english: `No problem. You can set it up later — just type *health card* anytime.\n\nWhat would you like to do next?\n\n1. Find a clinic\n2. Set medication reminder\n3. Set up health card`,
+      marathi: `ठीक आहे. नंतर केव्हाही *health card* टाइप करा.\n\nपुढे काय करायचे आहे?\n\n1. Clinic शोधा\n2. औषध reminder सेट करा\n3. Health card सेट करा`,
+      hindi: `कोई बात नहीं। बाद में कभी भी *health card* लिखें.\n\nआगे क्या करना है?\n\n1. Clinic खोजें\n2. दवाई reminder सेट करें\n3. Health card सेट करें`,
     }[lang];
   }
 
@@ -80,6 +80,22 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
         }[lang];
       }
       await updateCareRecipient(account_phone, { blood_group: normalised });
+    }
+    await updateAccount(account_phone, { pending_action: 'health_card_current_meds' });
+    return {
+      english: `Got it!\n\nWhat *current medications* do you take regularly? List the names separated by commas (e.g., Metformin, Amlodipine, Aspirin).\n\nType *skip* if none.`,
+      marathi: `ठीक आहे!\n\nतुम्ही सध्या कोणती *औषधे* नियमित घेता? नावे स्वल्पविरामाने विभागून लिहा (उदा. Metformin, Amlodipine).\n\nनसल्यास *skip* टाइप करा.`,
+      hindi: `ठीक है!\n\nआप अभी कौन सी *दवाइयाँ* नियमित लेते हैं? नाम comma से अलग करके लिखें (जैसे Metformin, Amlodipine).\n\nकोई नहीं तो *skip* लिखें.`,
+    }[lang];
+  }
+
+  // ── health_card_current_meds ──────────────────────────────────────────────
+  if (pending_action === 'health_card_current_meds') {
+    if (!isSkip) {
+      const items = input.split(/,|\n/).map(s => s.trim()).filter(Boolean).slice(0, 20);
+      const newMeds = items.map(n => ({ name: n.slice(0, 100) }));
+      const existing = recipient?.medication_schedule || [];
+      await updateCareRecipient(account_phone, { medication_schedule: [...existing, ...newMeds] });
     }
     await updateAccount(account_phone, { pending_action: 'health_card_allergies' });
     return {

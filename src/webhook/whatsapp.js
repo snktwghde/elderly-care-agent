@@ -39,6 +39,7 @@ const processedMessageIds = new Set();
 const HEALTH_CARD_SETUP_STATES = [
   'health_card_offer_pending',
   'health_card_blood_group',
+  'health_card_current_meds',
   'health_card_allergies',
   'health_card_illnesses',
   'health_card_surgeries',
@@ -861,6 +862,30 @@ async function handlePendingAction(account, messageText, lang, recipient) {
         }[lang];
   }
 
+  if (pending_action === 'health_card_declined_next_step') {
+    const choice = messageText.trim();
+    if (choice === '1') {
+      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      return await handleBookAppointment({ details: {} }, account, lang, recipient);
+    }
+    if (choice === '2') {
+      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: null });
+      return {
+        english: `What medications would you like to set reminders for? List the names separated by commas.`,
+        marathi: `कोणत्या औषधांसाठी reminders सेट करायचे आहेत? नावे स्वल्पविरामाने विभागून लिहा.`,
+        hindi:   `किन दवाइयों के लिए reminders सेट करने हैं? नाम comma से अलग करके लिखें.`,
+      }[lang];
+    }
+    if (choice === '3') {
+      return await startHealthCardSetup(account_phone, lang);
+    }
+    return {
+      english: `Please reply 1, 2, or 3:\n\n1. Find a clinic\n2. Set medication reminder\n3. Set up health card`,
+      marathi: `कृपया 1, 2, किंवा 3 reply करा:\n\n1. Clinic शोधा\n2. औषध reminder सेट करा\n3. Health card सेट करा`,
+      hindi:   `कृपया 1, 2, या 3 reply करें:\n\n1. Clinic खोजें\n2. दवाई reminder सेट करें\n3. Health card सेट करें`,
+    }[lang];
+  }
+
   if (HEALTH_CARD_SETUP_STATES.includes(pending_action)) {
     return await handleHealthCardSetup(account, messageText, lang, recipient);
   }
@@ -913,6 +938,19 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
         english: 'I could not find your profile. Please complete onboarding first.',
         marathi: 'तुमचे profile सापडले नाही. कृपया आधी onboarding पूर्ण करा.',
         hindi:   'आपकी profile नहीं मिली। पहले onboarding पूरा करें।',
+      }[lang];
+    }
+    const hasHealthCardData = recipient.blood_group ||
+      (recipient.medication_schedule || []).length > 0 ||
+      (recipient.allergies || []).length > 0 ||
+      (recipient.major_illnesses || []).length > 0 ||
+      recipient.medical_history;
+    if (!hasHealthCardData) {
+      await updateAccount(account.account_phone, { pending_action: 'health_card_offer_pending' });
+      return {
+        english: `You haven't set up your health card yet.\n\nWould you like to set it up now? Reply *Yes* to start or *No* to skip for now.`,
+        marathi: `तुमचे health card अजून सेट केलेले नाही.\n\nआत्ता सेट करायचे आहे का? सुरू करण्यासाठी *हो* म्हणा किंवा नंतरसाठी *नको* म्हणा.`,
+        hindi:   `आपका health card अभी सेट नहीं हुआ है.\n\nअभी सेट करना चाहते हैं? शुरू करने के लिए *हाँ* कहें या अभी छोड़ना हो तो *नहीं* लिखें.`,
       }[lang];
     }
     return generateHealthCard(recipient);
