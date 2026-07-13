@@ -562,6 +562,16 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   }
 
   if (pending_action === 'awaiting_medication_names') {
+    if (account.pending_data?.appending && /^replace$/i.test(messageText.trim())) {
+      await updateCareRecipient(account_phone, { medication_schedule: [] });
+      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: null });
+      const isSelf = account.account_type === 'self';
+      return {
+        english: `Okay, starting fresh. What medications do ${isSelf ? 'you' : recipient?.recipient_name || 'they'} currently take?`,
+        marathi: isSelf ? `ठीक आहे, नव्याने सुरुवात. तुम्ही सध्या कोणती औषधे घेता?` : `ठीक आहे, नव्याने सुरुवात. ${recipient?.recipient_name || 'ते'} सध्या कोणती औषधे घेतात?`,
+        hindi:   isSelf ? `ठीक है, नए सिरे से शुरू करते हैं। आप अभी कौन सी दवाइयाँ लेते हैं?` : `ठीक है, नए सिरे से। ${recipient?.recipient_name || 'वे'} अभी कौन सी दवाइयाँ लेते हैं?`,
+      }[lang];
+    }
     if (/^(skip|नको|नहीं|no thanks|nope|later|ok|okay|done|fine|alright|theek|thik)$/i.test(messageText.trim())) {
       await updateAccount(account_phone, { pending_action: null, pending_data: null });
       return {
@@ -919,16 +929,25 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
   }
 
   if (parsed.intent === 'medication_reminder') {
-    await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names' });
+    const existingMeds = (recipient?.medication_schedule || []).map(m => m.name).filter(Boolean);
     const isSelf = account.account_type === 'self';
+    const name = isSelf ? (lang === 'english' ? 'you' : null) : recipient?.recipient_name || 'they';
+
+    if (existingMeds.length > 0) {
+      await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names', pending_data: { appending: true } });
+      const medList = existingMeds.join(', ');
+      return {
+        english: `${isSelf ? 'You' : name} already have these medications saved: *${medList}*.\n\nWhat new medications would you like to add? Or type *replace* to start fresh.`,
+        marathi: `${isSelf ? 'तुमच्याकडे' : `${name} यांच्याकडे`} आधीच ही औषधे सेव्ह आहेत: *${medList}*.\n\nकोणती नवीन औषधे add करायची आहेत? किंवा सगळी बदलायची असल्यास *replace* टाइप करा.`,
+        hindi:   `${isSelf ? 'आपकी' : `${name} की`} ये दवाइयाँ पहले से saved हैं: *${medList}*.\n\nकौन सी नई दवाइयाँ add करनी हैं? या सब बदलना हो तो *replace* लिखें.`,
+      }[lang];
+    }
+
+    await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names' });
     return {
-      english: `What medications do ${isSelf ? 'you' : recipient?.recipient_name || 'they'} currently take?`,
-      marathi: isSelf
-        ? `तुम्ही सध्या कोणती औषधे घेता?`
-        : `${recipient?.recipient_name || 'ते'} सध्या कोणती औषधे घेतात?`,
-      hindi: isSelf
-        ? `आप अभी कौन सी दवाइयाँ लेते हैं?`
-        : `${recipient?.recipient_name || 'वे'} अभी कौन सी दवाइयाँ लेते हैं?`,
+      english: `What medications do ${isSelf ? 'you' : name} currently take?`,
+      marathi: isSelf ? `तुम्ही सध्या कोणती औषधे घेता?` : `${name} सध्या कोणती औषधे घेतात?`,
+      hindi:   isSelf ? `आप अभी कौन सी दवाइयाँ लेते हैं?` : `${name} अभी कौन सी दवाइयाँ लेते हैं?`,
     }[lang];
   }
 
