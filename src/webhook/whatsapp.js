@@ -279,13 +279,15 @@ async function handleClinicSelection(account, messageText, lang, recipient) {
       pending_data: { selected_clinic: clinic, next_page_token: account.pending_data?.next_page_token || null },
     });
     return {
-      english: `📍 *${clinic.name}*\n\n${clinic.address}\n\nNo phone number listed. Did ${isSelf ? 'you' : recipientName}:\n\n1. Visit the doctor today (walk-in)\n2. Plan to visit later\n\nReply 1 or 2`,
+      english: isSelf
+        ? `📍 *${clinic.name}*\n\n${clinic.address}\n\nNo phone number listed — you can walk in directly.\n\nDid you:\n\n1. Visited the doctor today (walk-in)?\n2. Skip this. Find another clinic with contact available\n\nReply 1 or 2`
+        : `📍 *${clinic.name}*\n\n${clinic.address}\n\nNo phone number listed — ask ${recipientName} to walk in directly.\n\nDid ${recipientName}:\n\n1. Visit the doctor today (walk-in)?\n2. Skip this. Find another clinic with contact available\n\nReply 1 or 2`,
       marathi: isSelf
-        ? `📍 *${clinic.name}*\n\n${clinic.address}\n\nफोन नंबर उपलब्ध नाही. तुम्ही:\n\n1. आज Doctor ला भेटलात (walk-in)\n2. नंतर जाण्याचा विचार आहे\n\n1 किंवा 2 reply करा`
-        : `📍 *${clinic.name}*\n\n${clinic.address}\n\nफोन नंबर उपलब्ध नाही. ${recipientName} यांनी:\n\n1. आज Doctor ला भेटले (walk-in)\n2. नंतर जाण्याचा विचार आहे\n\n1 किंवा 2 reply करा`,
+        ? `📍 *${clinic.name}*\n\n${clinic.address}\n\nफोन नंबर उपलब्ध नाही — थेट walk-in करता येईल.\n\nतुम्ही:\n\n1. आज Doctor ला भेटलात (walk-in)?\n2. हे सोडा. फोन नंबर असलेले दुसरे clinic शोधा\n\n1 किंवा 2 reply करा`
+        : `📍 *${clinic.name}*\n\n${clinic.address}\n\nफोन नंबर उपलब्ध नाही — ${recipientName} यांना थेट walk-in करायला सांगा.\n\n${recipientName} यांनी:\n\n1. आज Doctor ला भेटले (walk-in)?\n2. हे सोडा. फोन नंबर असलेले दुसरे clinic शोधा\n\n1 किंवा 2 reply करा`,
       hindi: isSelf
-        ? `📍 *${clinic.name}*\n\n${clinic.address}\n\nफ़ोन नंबर उपलब्ध नहीं। क्या आपने:\n\n1. आज Doctor से मिले (walk-in)\n2. बाद में जाने का plan है\n\n1 या 2 reply करें`
-        : `📍 *${clinic.name}*\n\n${clinic.address}\n\nफ़ोन नंबर उपलब्ध नहीं। क्या ${recipientName} ने:\n\n1. आज Doctor से मिले (walk-in)\n2. बाद में जाने का plan है\n\n1 या 2 reply करें`,
+        ? `📍 *${clinic.name}*\n\n${clinic.address}\n\nफ़ोन नंबर उपलब्ध नहीं — सीधे walk-in किया जा सकता है।\n\nक्या आपने:\n\n1. आज Doctor से मिले (walk-in)?\n2. यह छोड़ें। फ़ोन नंबर वाला दूसरा clinic खोजें\n\n1 या 2 reply करें`
+        : `📍 *${clinic.name}*\n\n${clinic.address}\n\nफ़ोन नंबर उपलब्ध नहीं — ${recipientName} को सीधे walk-in करने कहें।\n\nक्या ${recipientName} ने:\n\n1. आज Doctor से मिले (walk-in)?\n2. यह छोड़ें। फ़ोन नंबर वाला दूसरा clinic खोजें\n\n1 या 2 reply करें`,
     }[lang];
   }
 
@@ -412,21 +414,14 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     }
 
     if (choice === '2') {
-      await updateAccount(account_phone, {
-        pending_action: 'awaiting_appointment_time_input',
-        pending_data: { selected_clinic: clinic },
-      });
-      return {
-        english: `Got it! What time is the appointment at *${clinicName}*?`,
-        marathi: `ठीक आहे! *${clinicName}* येथे appointment कधी आहे?`,
-        hindi:   `ठीक है! *${clinicName}* में appointment कितने बजे है?`,
-      }[lang];
+      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      return await searchAndFormatClinics(recipient, null, lang, account.account_type === 'self');
     }
 
     return {
-      english: `Please reply *1* if you met the doctor today, or *2* if you booked an appointment for later.`,
-      marathi: `कृपया *1* म्हणा जर आज Doctor ला भेटलात, किंवा *2* जर नंतरसाठी appointment book केली.`,
-      hindi:   `कृपया *1* लिखें अगर आज Doctor से मिले, या *2* अगर बाद की appointment book की।`,
+      english: `Please reply *1* if they saw the doctor today, or *2* to find another clinic.`,
+      marathi: `कृपया *1* म्हणा जर आज Doctor ला भेटले, किंवा *2* दुसरे clinic शोधण्यासाठी.`,
+      hindi:   `कृपया *1* लिखें अगर आज Doctor से मिले, या *2* दूसरा clinic खोजने के लिए।`,
     }[lang];
   }
 
