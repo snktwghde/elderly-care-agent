@@ -23,9 +23,9 @@ const Q = {
   },
 
   address: {
-    english: (name) => `What is ${name}'s home address? (area and city is fine)`,
-    marathi: (name) => `${name} यांचा घराचा पत्ता सांगा. (भाग आणि शहर पुरेसे आहे)`,
-    hindi:   (name) => `${name} का घर का पता बताएं. (इलाका और शहर काफी है)`,
+    english: (name, isSelf) => isSelf ? `What is your home address? (area and city is fine)` : `What is ${name}'s home address? (area and city is fine)`,
+    marathi: (name, isSelf) => isSelf ? `तुमचा घराचा पत्ता सांगा. (भाग आणि शहर पुरेसे आहे)` : `${name} यांचा घराचा पत्ता सांगा. (भाग आणि शहर पुरेसे आहे)`,
+    hindi:   (name, isSelf) => isSelf ? `आपका घर का पता बताएं. (इलाका और शहर काफी है)` : `${name} का घर का पता बताएं. (इलाका और शहर काफी है)`,
   },
 
   recipient_phone: {
@@ -47,9 +47,15 @@ const Q = {
   },
 
   doctor: {
-    english: (name) => `Does ${name} have a regular doctor or clinic they usually visit?\n\nShare the name and address — we'll show you their contact details when you need to book a visit.\n\nIf not, reply *skip*`,
-    marathi: (name) => `${name} यांचे नेहमीचे डॉक्टर किंवा क्लिनिक आहे का?\n\nनाव व पत्ता द्या — visit बुक करायची असेल तेव्हा आम्ही contact details दाखवू.\n\nनसल्यास *skip* टाइप करा.`,
-    hindi:   (name) => `क्या ${name} का कोई नियमित डॉक्टर या क्लिनिक है?\n\nनाम और पता दें — जब visit बुक करनी हो, हम contact details दिखाएंगे.\n\nनहीं है तो *skip* लिखें.`,
+    english: (name, isSelf) => isSelf
+      ? `Do you have a regular doctor or clinic you usually visit?\n\nShare the name and address — we'll show you their contact details when you need to book a visit.\n\nIf not, reply *skip*`
+      : `Does ${name} have a regular doctor or clinic they usually visit?\n\nShare the name and address — we'll show you their contact details when you need to book a visit.\n\nIf not, reply *skip*`,
+    marathi: (name, isSelf) => isSelf
+      ? `तुमचे नेहमीचे डॉक्टर किंवा क्लिनिक आहे का?\n\nनाव व पत्ता द्या — visit बुक करायची असेल तेव्हा आम्ही contact details दाखवू.\n\nनसल्यास *skip* टाइप करा.`
+      : `${name} यांचे नेहमीचे डॉक्टर किंवा क्लिनिक आहे का?\n\nनाव व पत्ता द्या — visit बुक करायची असेल तेव्हा आम्ही contact details दाखवू.\n\nनसल्यास *skip* टाइप करा.`,
+    hindi:   (name, isSelf) => isSelf
+      ? `क्या आपका कोई नियमित डॉक्टर या क्लिनिक है?\n\nनाम और पता दें — जब visit बुक करनी हो, हम contact details दिखाएंगे.\n\nनहीं है तो *skip* लिखें.`
+      : `क्या ${name} का कोई नियमित डॉक्टर या क्लिनिक है?\n\nनाम और पता दें — जब visit बुक करनी हो, हम contact details दिखाएंगे.\n\nनहीं है तो *skip* लिखें.`,
   },
 
   complete: {
@@ -126,7 +132,7 @@ export async function handleOnboarding(account, messageText) {
         onboarding_step: 'address',
         onboarding_data: { ...data, recipient_name: recipientName },
       });
-      return Q.address[lang](recipientName);
+      return Q.address[lang](recipientName, data.account_type !== 'caregiver');
     }
 
     case 'address': {
@@ -163,7 +169,7 @@ export async function handleOnboarding(account, messageText) {
         onboarding_step: 'doctor',
         onboarding_data: { ...data, family_contacts: contacts },
       });
-      return Q.doctor[lang](name);
+      return Q.doctor[lang](name, data.account_type !== 'caregiver');
     }
 
     case 'doctor': {
