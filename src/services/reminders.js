@@ -68,14 +68,16 @@ async function processReminders() {
     const clinic = appt.clinic_name || 'Doctor';
     const name   = recipient.recipient_name;
     const dt     = appt.appointment_datetime;
+    // Self flow: recipient_phone matches account_phone (set during onboarding)
+    const isSelf = toWhatsAppPhone(recipient.recipient_phone) === toWhatsAppPhone(appt.account_phone);
 
     // Single reminder 1 hour before — sent only to the user, not family
     if (!appt.reminder_2h_sent && h >= 0.75 && h <= 1.25) {
       await updateAppointment(appt.id, { reminder_2h_sent: true });
       const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(clinic + ', Pune')}`;
       const msg = lang === 'hindi'
-        ? `⏰ Reminder: ${name} की appointment 1 घंटे में है — ${hindiTime(dt)} ${clinic}।\n\n📍 ${mapsUrl}`
-        : `⏰ Reminder: ${name} यांची appointment 1 तासात आहे — ${marathiTime(dt)} ${clinic}.\n\n📍 ${mapsUrl}`;
+        ? `⏰ Reminder: ${isSelf ? 'आपकी' : `${name} की`} appointment 1 घंटे में है — ${hindiTime(dt)} ${clinic}।\n\n📍 ${mapsUrl}`
+        : `⏰ Reminder: ${isSelf ? 'तुमची' : `${name} यांची`} appointment 1 तासात आहे — ${marathiTime(dt)} ${clinic}.\n\n📍 ${mapsUrl}`;
       await sendTextMessage(userPhone, msg).catch(e => console.error(`Reminder failed to ${userPhone.slice(0, 5)}***:`, e.message));
     }
   }
@@ -101,6 +103,7 @@ async function processMedicationReminders() {
 
     const lang = recipient.preferred_language === 'hindi' ? 'hindi' : 'marathi';
     const phone = toWhatsAppPhone(recipient.recipient_phone || recipient.account_phone);
+    const isSelfMed = toWhatsAppPhone(recipient.recipient_phone) === toWhatsAppPhone(recipient.account_phone);
 
     for (let medIndex = 0; medIndex < schedules.length; medIndex++) {
       const schedule = schedules[medIndex];
@@ -117,8 +120,8 @@ async function processMedicationReminders() {
         await createMedicationLog(recipient.account_phone, medIndex, slot);
 
         const msg = lang === 'hindi'
-          ? `💊 ${recipient.recipient_name} जी, *${schedule.name}* लेने का समय हो गया।\n\nलेने के बाद *Done* लिखें।`
-          : `💊 ${recipient.recipient_name}, *${schedule.name}* घेण्याची वेळ झाली.\n\nघेतल्यावर *Done* म्हणा.`;
+          ? `💊 ${isSelfMed ? 'आपके' : `${recipient.recipient_name} जी,`} *${schedule.name}* लेने का समय हो गया।\n\nलेने के बाद *Done* लिखें।`
+          : `💊 ${isSelfMed ? '' : `${recipient.recipient_name}, `}*${schedule.name}* घेण्याची वेळ झाली.\n\nघेतल्यावर *Done* म्हणा.`;
 
         await sendTextMessage(phone, msg).catch(e => console.error(`Medication reminder failed to ${phone.slice(0, 5)}***:`, e.message));
       }

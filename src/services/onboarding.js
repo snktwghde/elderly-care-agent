@@ -59,9 +59,15 @@ const Q = {
   },
 
   complete: {
-    english: (name, isSelf) => `All set! CareProxy is ready for ${name}.\n\nYou can now${isSelf ? '' : ` help ${name} with`}:\n• Locate nearby clinics to book doctor appointment\n• Set medication reminders\n• Get emergency help\n\nJust send a message anytime.`,
-    marathi: (name, isSelf) => `सर्व तयार! CareProxy ${name} यांच्यासाठी तयार आहे.\n\nआता तुम्ही${isSelf ? '' : ` ${name} यांना मदत करू शकता`}:\n• Doctor appointment साठी जवळचे clinic शोधा\n• औषधांची आठवण सेट करा\n• आपत्कालीन मदत मिळवा\n\nकधीही संदेश करा.`,
-    hindi:   (name, isSelf) => `सब तैयार! CareProxy ${name} के लिए तैयार है.\n\nअब आप${isSelf ? '' : ` ${name} की मदद कर सकते हैं`}:\n• Doctor appointment के लिए नज़दीकी clinic खोजें\n• दवाई reminder सेट करें\n• आपातकालीन मदद लें\n\nकभी भी message करें.`,
+    english: (name, isSelf) => isSelf
+      ? `All set! CareProxy is ready for you.\n\nYou can now:\n• Locate nearby clinics to book doctor appointment\n• Set medication reminders\n• Get emergency help\n\nJust send a message anytime.`
+      : `All set! CareProxy is ready for ${name}.\n\nYou can now help ${name} with:\n• Locate nearby clinics to book doctor appointment\n• Set medication reminders\n• Get emergency help\n\nJust send a message anytime.`,
+    marathi: (name, isSelf) => isSelf
+      ? `सर्व तयार! CareProxy तुमच्यासाठी तयार आहे.\n\nआता तुम्ही:\n• Doctor appointment साठी जवळचे clinic शोधा\n• औषधांची आठवण सेट करा\n• आपत्कालीन मदत मिळवा\n\nकधीही संदेश करा.`
+      : `सर्व तयार! CareProxy ${name} यांच्यासाठी तयार आहे.\n\nआता तुम्ही ${name} यांना मदत करू शकता:\n• Doctor appointment साठी जवळचे clinic शोधा\n• औषधांची आठवण सेट करा\n• आपत्कालीन मदत मिळवा\n\nकधीही संदेश करा.`,
+    hindi:   (name, isSelf) => isSelf
+      ? `सब तैयार! CareProxy आपके लिए तैयार है.\n\nअब आप:\n• Doctor appointment के लिए नज़दीकी clinic खोजें\n• दवाई reminder सेट करें\n• आपातकालीन मदद लें\n\nकभी भी message करें.`
+      : `सब तैयार! CareProxy ${name} के लिए तैयार है.\n\nअब आप ${name} की मदद कर सकते हैं:\n• Doctor appointment के लिए नज़दीकी clinic खोजें\n• दवाई reminder सेट करें\n• आपातकालीन मदद लें\n\nकभी भी message करें.`,
   },
 };
 
