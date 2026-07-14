@@ -115,9 +115,11 @@ router.post('/', async (req, res) => {
         await sendTrialStartedMessage(senderPhone);
         const newRecipient = await getPrimaryCareRecipient(senderPhone);
         const offerLang = newRecipient?.preferred_language || 'english';
-        await sendHealthCardOffer(senderPhone, offerLang).catch(e =>
-          console.error('[Health card offer failed]', e.message)
-        );
+        await sendHealthCardOffer(
+          senderPhone, offerLang,
+          updated.account_type === 'self',
+          newRecipient?.recipient_name || ''
+        ).catch(e => console.error('[Health card offer failed]', e.message));
       }
       return;
     }
@@ -260,6 +262,8 @@ async function handleClinicSelection(account, messageText, lang, recipient) {
   const index = parseInt(messageText.trim()) - 1;
   const clinics = account.pending_data?.clinics || [];
   const clinic = clinics[index];
+  const isSelf = account.account_type === 'self';
+  const recipientName = recipient?.recipient_name || 'them';
 
   if (!clinic) {
     return {
@@ -275,9 +279,13 @@ async function handleClinicSelection(account, messageText, lang, recipient) {
       pending_data: { selected_clinic: clinic, next_page_token: account.pending_data?.next_page_token || null },
     });
     return {
-      english: `📍 *${clinic.name}*\n\n${clinic.address}\n\nNo phone number listed. Did you:\n\n1. Visit the doctor today (walk-in)\n2. Plan to visit later\n\nReply 1 or 2`,
-      marathi: `📍 *${clinic.name}*\n\n${clinic.address}\n\nफोन नंबर उपलब्ध नाही. तुम्ही:\n\n1. आज Doctor ला भेटलात (walk-in)\n2. नंतर जाण्याचा विचार आहे\n\n1 किंवा 2 reply करा`,
-      hindi:   `📍 *${clinic.name}*\n\n${clinic.address}\n\nफ़ोन नंबर उपलब्ध नहीं। क्या आपने:\n\n1. आज Doctor से मिले (walk-in)\n2. बाद में जाने का plan है\n\n1 या 2 reply करें`,
+      english: `📍 *${clinic.name}*\n\n${clinic.address}\n\nNo phone number listed. Did ${isSelf ? 'you' : recipientName}:\n\n1. Visit the doctor today (walk-in)\n2. Plan to visit later\n\nReply 1 or 2`,
+      marathi: isSelf
+        ? `📍 *${clinic.name}*\n\n${clinic.address}\n\nफोन नंबर उपलब्ध नाही. तुम्ही:\n\n1. आज Doctor ला भेटलात (walk-in)\n2. नंतर जाण्याचा विचार आहे\n\n1 किंवा 2 reply करा`
+        : `📍 *${clinic.name}*\n\n${clinic.address}\n\nफोन नंबर उपलब्ध नाही. ${recipientName} यांनी:\n\n1. आज Doctor ला भेटले (walk-in)\n2. नंतर जाण्याचा विचार आहे\n\n1 किंवा 2 reply करा`,
+      hindi: isSelf
+        ? `📍 *${clinic.name}*\n\n${clinic.address}\n\nफ़ोन नंबर उपलब्ध नहीं। क्या आपने:\n\n1. आज Doctor से मिले (walk-in)\n2. बाद में जाने का plan है\n\n1 या 2 reply करें`
+        : `📍 *${clinic.name}*\n\n${clinic.address}\n\nफ़ोन नंबर उपलब्ध नहीं। क्या ${recipientName} ने:\n\n1. आज Doctor से मिले (walk-in)\n2. बाद में जाने का plan है\n\n1 या 2 reply करें`,
     }[lang];
   }
 
@@ -292,7 +300,7 @@ async function handleClinicSelection(account, messageText, lang, recipient) {
   });
 
   return {
-    english: `📞 *${clinic.name}*\n\n${clinic.phone}\n\n📍 ${clinic.address}\n\nCall to book your appointment. Once done, reply *Yes* to confirm.\nVisited today instead? Reply *Walk-in*.\nNeed more options? Type *more*.`,
+    english: `📞 *${clinic.name}*\n\n${clinic.phone}\n\n📍 ${clinic.address}\n\nCall to book ${isSelf ? 'your' : `${recipientName}'s`} appointment. Once done, reply *Yes* to confirm.\nVisited today instead? Reply *Walk-in*.\nNeed more options? Type *more*.`,
     marathi: `📞 *${clinic.name}*\n\n${clinic.phone}\n\n📍 ${clinic.address}\n\nAppointment साठी call करा. झाल्यावर *हो* म्हणा.\nआज भेटलात? *Walk-in* म्हणा.\nआणखी पर्याय? *more* टाइप करा.`,
     hindi:   `📞 *${clinic.name}*\n\n${clinic.phone}\n\n📍 ${clinic.address}\n\nAppointment के लिए call करें। हो जाने पर *हाँ* कहें।\nआज मिले? *Walk-in* कहें।\nAur options? *more* लिखें।`,
   }[lang];
@@ -324,12 +332,16 @@ async function handleMoreClinics(account, lang) {
     },
   });
 
-  return formatClinicList(clinics, null, lang, !!nextPageToken);
+  const recipient = await getPrimaryCareRecipient(account.account_phone);
+  return formatClinicList(clinics, null, lang, !!nextPageToken, account.account_type === 'self', recipient?.recipient_name || '');
 }
 
 // ─── Appointment save + medication handoff ────────────────────────────────────
 
 async function confirmAndSaveAppointment({ account, account_phone, recipient, lang, clinic, appointmentTime, dateDisplay, datetimeIso }) {
+  const isSelf = account.account_type === 'self';
+  const recipientName = recipient?.recipient_name || 'them';
+
   await createAppointment({
     account_phone,
     recipient_name: recipient.recipient_name,
@@ -341,12 +353,12 @@ async function confirmAndSaveAppointment({ account, account_phone, recipient, la
     appointment_datetime: datetimeIso || null,
   });
 
-  const familyContacts = recipient.family_contacts || [];
+  const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
+  const familyContacts = (recipient.family_contacts || []).filter(p => toE164(p) !== account_phone);
   if (familyContacts.length > 0) {
     const familyMsg = lang === 'hindi'
       ? `📅 ${recipient.recipient_name} की appointment confirm हो गई.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${dateDisplay ? '\n📅 ' + dateDisplay : ''}\n\n— CareProxy`
       : `📅 ${recipient.recipient_name} यांची appointment confirm झाली.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${dateDisplay ? '\n📅 ' + dateDisplay : ''}\n\n— CareProxy`;
-    const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
     await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
   }
 
@@ -363,7 +375,7 @@ async function confirmAndSaveAppointment({ account, account_phone, recipient, la
 
   const dateStr = dateDisplay ? `\n📅 ${dateDisplay}` : '';
   return {
-    english: `✅ Appointment confirmed at *${clinic.name || 'doctor'}*!\n🕐 ${appointmentTime}${dateStr}${familyContacts.length > 0 ? '\nYour family has been notified. 👨‍👩‍👧' : ''} I'll remind you 1 hour before. 🔔\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
+    english: `✅ Appointment confirmed at *${clinic.name || 'doctor'}*!\n🕐 ${appointmentTime}${dateStr}${familyContacts.length > 0 ? '\nFamily has been notified. 👨‍👩‍👧' : ''} I'll remind ${isSelf ? 'you' : recipientName} 1 hour before. 🔔\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
     marathi: `✅ *${clinic.name || 'Doctor'}* येथे appointment नोंदवली!\n🕐 ${appointmentTime}${dateStr}${familyContacts.length > 0 ? '\nकुटुंबाला कळवले. 👨‍👩‍👧' : ''} 1 तास आधी reminder येईल. 🔔\n\nDoctor ने नवीन औषधे दिली का? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
     hindi:   `✅ *${clinic.name || 'Doctor'}* में appointment दर्ज हो गई!\n🕐 ${appointmentTime}${dateStr}${familyContacts.length > 0 ? '\nपरिवार को बता दिया। 👨‍👩‍👧' : ''} 1 घंटे पहले reminder आएगा। 🔔\n\nDoctor ने कोई नई दवाइयाँ दी हैं? नाम बताएं, मैं reminders सेट कर दूंगा।\n\nनहीं दी तो *skip* लिखें।`,
   }[lang];
@@ -381,7 +393,8 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
 
     if (choice === '1') {
-      const familyContacts = recipient?.family_contacts || [];
+      const isSelf = account.account_type === 'self';
+      const familyContacts = (recipient?.family_contacts || []).filter(p => toE164(p) !== account_phone);
       if (familyContacts.length > 0) {
         const name = recipient.recipient_name;
         const familyMsg = lang === 'hindi'
@@ -392,7 +405,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
 
       return {
-        english: `Got it! Glad they saw the doctor. 😊\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
+        english: `Got it! Glad ${isSelf ? 'you' : 'they'} saw the doctor. 😊\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
         marathi: `ठीक आहे! Doctor ला भेटले, छान! 😊\n\nDoctor ने नवीन औषधे दिली का? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
         hindi:   `ठीक है! Doctor से मिले, अच्छा हुआ। 😊\n\nDoctor ने कोई नई दवाइयाँ दी हैं? नाम बताएं, मैं reminders सेट कर दूंगा।\n\nनहीं दी तो *skip* लिखें।`,
       }[lang];
@@ -424,9 +437,10 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
     if (isWalkIn) {
       updateAffirmativePattern(account_phone, choice).catch(() => {});
+      const isSelf = account.account_type === 'self';
       const clinic = account.pending_data?.selected_clinic;
       const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
-      const familyContacts = recipient?.family_contacts || [];
+      const familyContacts = (recipient?.family_contacts || []).filter(p => toE164(p) !== account_phone);
       if (familyContacts.length > 0) {
         const familyMsg = lang === 'hindi'
           ? `🏥 ${recipient.recipient_name} ने आज *${clinic?.name || 'doctor'}* में doctor से मिले। — CareProxy`
@@ -435,7 +449,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }
       await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
       return {
-        english: `Got it! Glad they saw the doctor. 😊\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
+        english: `Got it! Glad ${isSelf ? 'you' : 'they'} saw the doctor. 😊\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
         marathi: `ठीक आहे! Doctor ला भेटले, छान! 😊\n\nDoctor ने नवीन औषधे दिली का? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
         hindi:   `ठीक है! Doctor से मिले, अच्छा हुआ। 😊\n\nDoctor ने कोई नई दवाइयाँ दी हैं? नाम बताएं, मैं reminders सेट कर दूंगा।\n\nनहीं दी तो *skip* लिखें।`,
       }[lang];
@@ -528,37 +542,41 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   if (pending_action === 'appointment_type') {
     if (choice === '1') {
       await updateAccount(account_phone, { pending_action: null });
-      return await searchAndFormatClinics(recipient, null, lang);
+      return await searchAndFormatClinics(recipient, null, lang, account.account_type === 'self');
     }
     if (choice === '2') {
+      const isSelfApptType = account.account_type === 'self';
+      const rNameApptType = recipient?.recipient_name || 'them';
       await updateAccount(account_phone, { pending_action: 'specialist_type' });
       return {
-        english: 'Which type of specialist do you need?\n\nFor example: eye, heart, bones, skin, ENT, teeth',
-        marathi: 'कोणत्या प्रकारचे तज्ज्ञ डॉक्टर हवे आहेत?\n\nउदाहरण: डोळे, हृदय, हाडे, त्वचा, कान-नाक-घसा, दात',
-        hindi:   'किस प्रकार के विशेषज्ञ डॉक्टर चाहिए?\n\nउदाहरण: आँख, दिल, हड्डी, त्वचा, कान-नाक-गला, दाँत',
+        english: `Which type of specialist does ${isSelfApptType ? 'you' : rNameApptType} need?\n\nFor example: eye, heart, bones, skin, ENT, teeth`,
+        marathi: `${isSelfApptType ? 'तुम्हाला' : `${rNameApptType} यांना`} कोणत्या प्रकारचे तज्ज्ञ डॉक्टर हवे आहेत?\n\nउदाहरण: डोळे, हृदय, हाडे, त्वचा, कान-नाक-घसा, दात`,
+        hindi:   `${isSelfApptType ? 'आपको' : `${rNameApptType} को`} किस प्रकार के विशेषज्ञ डॉक्टर चाहिए?\n\nउदाहरण: आँख, दिल, हड्डी, त्वचा, कान-नाक-गला, दाँत`,
       }[lang];
     }
   }
 
   if (pending_action === 'saved_doctor_choice') {
+    const isSelf = account.account_type === 'self';
+    const recipientName = recipient?.recipient_name || 'them';
     if (choice === '1') {
       await updateAccount(account_phone, { pending_action: null });
       const doctor = recipient?.saved_doctors?.[0];
       return {
-        english: `Calling ${doctor?.info || 'your saved doctor'} to book your appointment. (Coming in Phase 4)`,
-        marathi: `${doctor?.info || 'तुमच्या नेहमीच्या डॉक्टर'}कडे appointment बुक करण्यासाठी call करत आहोत. (लवकरच येणार)`,
-        hindi:   `${doctor?.info || 'आपके डॉक्टर'} को appointment बुक करने के लिए call कर रहे हैं. (जल्द आएगा)`,
+        english: `Calling ${doctor?.info || (isSelf ? 'your saved doctor' : `${recipientName}'s saved doctor`)} to book ${isSelf ? 'your' : `${recipientName}'s`} appointment. (Coming in Phase 4)`,
+        marathi: `${doctor?.info || (isSelf ? 'तुमच्या नेहमीच्या डॉक्टर' : `${recipientName} यांच्या नेहमीच्या डॉक्टर`)}कडे appointment बुक करण्यासाठी call करत आहोत. (लवकरच येणार)`,
+        hindi:   `${doctor?.info || (isSelf ? 'आपके डॉक्टर' : `${recipientName} के डॉक्टर`)} को appointment बुक करने के लिए call कर रहे हैं. (जल्द आएगा)`,
       }[lang];
     }
     if (choice === '2') {
       await updateAccount(account_phone, { pending_action: null });
-      return await searchAndFormatClinics(recipient, null, lang);
+      return await searchAndFormatClinics(recipient, null, lang, isSelf);
     }
   }
 
   if (pending_action === 'specialist_type') {
     await updateAccount(account_phone, { pending_action: null });
-    return await searchAndFormatClinics(recipient, messageText.trim(), lang);
+    return await searchAndFormatClinics(recipient, messageText.trim(), lang, account.account_type === 'self');
   }
 
   if (pending_action === 'awaiting_medication_names') {
@@ -597,6 +615,8 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }[lang];
     }
     // Check for medication conflicts against learned active_medications
+    const isSelf = account.account_type === 'self';
+    const rName = recipient?.recipient_name || 'they';
     const activeMeds = recipient?.user_insights?.active_medications || [];
     const conflictPair = medicines.reduce((found, newMed) => {
       if (found) return found;
@@ -611,9 +631,9 @@ async function handlePendingAction(account, messageText, lang, recipient) {
         pending_data: { conflict_old: conflictPair.oldMed, conflict_new: conflictPair.newMed, medicines, current_index: 0, collected_schedules: [] },
       });
       return {
-        english: `You're already taking *${conflictPair.oldMed}*. Has the doctor asked you to stop it and take *${conflictPair.newMed}* instead?\n\n1. Yes, stop ${conflictPair.oldMed}\n2. No, take both\n\nReply 1 or 2`,
-        marathi: `तुम्ही आधीच *${conflictPair.oldMed}* घेत आहात. Doctor नी ती बंद करून *${conflictPair.newMed}* घ्यायला सांगितली का?\n\n1. हो, ${conflictPair.oldMed} बंद करा\n2. नाही, दोन्ही घ्यायच्या\n\n1 किंवा 2 reply करा`,
-        hindi:   `आप पहले से *${conflictPair.oldMed}* ले रहे हैं। क्या Doctor ने इसे बंद करके *${conflictPair.newMed}* लेने को कहा?\n\n1. हाँ, ${conflictPair.oldMed} बंद करें\n2. नहीं, दोनों लेनी हैं\n\n1 या 2 reply करें`,
+        english: `${isSelf ? 'You are' : `${rName} is`} already taking *${conflictPair.oldMed}*. Has the doctor asked ${isSelf ? 'you' : 'them'} to stop it and take *${conflictPair.newMed}* instead?\n\n1. Yes, stop ${conflictPair.oldMed}\n2. No, take both\n\nReply 1 or 2`,
+        marathi: `${isSelf ? 'तुम्ही' : rName} आधीच *${conflictPair.oldMed}* घेत ${isSelf ? 'आहात' : 'आहेत'}. Doctor नी ती बंद करून *${conflictPair.newMed}* घ्यायला सांगितली का?\n\n1. हो, ${conflictPair.oldMed} बंद करा\n2. नाही, दोन्ही घ्यायच्या\n\n1 किंवा 2 reply करा`,
+        hindi:   `${isSelf ? 'आप' : rName} पहले से *${conflictPair.oldMed}* ले ${isSelf ? 'रहे हैं' : 'रहे हैं'}। क्या Doctor ने इसे बंद करके *${conflictPair.newMed}* लेने को कहा?\n\n1. हाँ, ${conflictPair.oldMed} बंद करें\n2. नहीं, दोनों लेनी हैं\n\n1 या 2 reply करें`,
       }[lang];
     }
 
@@ -622,7 +642,6 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       pending_action: 'awaiting_medication_frequency',
       pending_data: { medicines, current_index: 0, collected_schedules: [], is_prescription: isPrescription },
     });
-    const isSelf = account.account_type === 'self';
     return isPrescription ? {
       english: `How many times a day has the doctor advised to take *${medicines[0]}*?`,
       marathi: `Doctor ने *${medicines[0]}* दिवसातून किती वेळा घेण्यास सांगितले?`,
@@ -722,14 +741,20 @@ async function handlePendingAction(account, messageText, lang, recipient) {
         pending_action: 'awaiting_medication_frequency',
         pending_data: { medicines, current_index: nextIndex, collected_schedules: updatedSchedules, is_prescription: isPrescription },
       });
+      const isSelf22 = account.account_type === 'self';
+      const rName22 = recipient?.recipient_name || 'they';
       return isPrescription ? {
         english: `Got it! How many times a day has the doctor advised to take *${medicines[nextIndex]}*?`,
         marathi: `ठीक आहे! Doctor ने *${medicines[nextIndex]}* दिवसातून किती वेळा घेण्यास सांगितले?`,
         hindi:   `ठीक है! Doctor ने *${medicines[nextIndex]}* दिन में कितनी बार लेने की सलाह दी?`,
       }[lang] : {
-        english: `Got it! Now, how many times a day do you take *${medicines[nextIndex]}*?`,
-        marathi: `ठीक आहे! आता, *${medicines[nextIndex]}* दिवसातून किती वेळा घेता?`,
-        hindi:   `ठीक है! अब, *${medicines[nextIndex]}* दिन में कितनी बार लेते हैं?`,
+        english: `Got it! Now, how many times a day do ${isSelf22 ? 'you' : rName22} take *${medicines[nextIndex]}*?`,
+        marathi: isSelf22
+          ? `ठीक आहे! आता, *${medicines[nextIndex]}* दिवसातून किती वेळा घेता?`
+          : `ठीक आहे! आता, ${rName22} *${medicines[nextIndex]}* दिवसातून किती वेळा घेतात?`,
+        hindi: isSelf22
+          ? `ठीक है! अब, *${medicines[nextIndex]}* दिन में कितनी बार लेते हैं?`
+          : `ठीक है! अब, ${rName22} *${medicines[nextIndex]}* दिन में कितनी बार लेते हैं?`,
       }[lang];
     }
 
@@ -744,7 +769,8 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     await updateCareRecipient(account_phone, { medication_schedule: merged });
     updateMedicationInsight(account_phone, merged).catch(() => {});
 
-    const familyContacts = recipient?.family_contacts || [];
+    const toE164Med = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
+    const familyContacts = (recipient?.family_contacts || []).filter(p => toE164Med(p) !== account_phone);
     if (familyContacts.length > 0) {
       const summary = updatedSchedules.map(s =>
         `• ${s.name}: ${s.times.map(displayTime).join(', ')} (${s.frequency}x daily)`
@@ -752,8 +778,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       const familyMsg = lang === 'hindi'
         ? `💊 ${recipient.recipient_name} की दवाइयों के reminders सेट हो गए।\n\n${summary}\n\n— CareProxy`
         : `💊 ${recipient.recipient_name} यांच्या औषधांचे reminders सेट झाले.\n\n${summary}\n\n— CareProxy`;
-      const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
-      await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Send failed to ${p}:`, e.message))));
+      await Promise.all(familyContacts.map(p => sendTextMessage(toE164Med(p), familyMsg).catch(e => console.error(`Send failed to ${p}:`, e.message))));
     }
 
     const confirmSummary = updatedSchedules.map(s =>
@@ -792,7 +817,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       const isSelf = account.account_type === 'self';
       await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: false } });
       return {
-        english: `What other medications does ${isSelf ? 'you take' : `${recipient?.recipient_name || 'they'} take`} regularly? Tell me the names.`,
+        english: `What other medications do ${isSelf ? 'you' : (recipient?.recipient_name || 'they')} take regularly? Tell me the names.`,
         marathi: `${isSelf ? 'तुम्ही' : recipient?.recipient_name || 'ते'} नियमित आणखी कोणती औषधे घेतात? नावे सांगा.`,
         hindi:   `${isSelf ? 'आप' : recipient?.recipient_name || 'वे'} नियमित और कौन सी दवाइयाँ लेते हैं? नाम बताएं।`,
       }[lang];
@@ -807,11 +832,13 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
   if (pending_action === 'returning_clinic_choice') {
     const returningClinic = account.pending_data?.returning_clinic;
+    const isSelf = account.account_type === 'self';
+    const recipientName = recipient?.recipient_name || 'them';
 
     if (choice === '1') {
       if (!returningClinic?.phone) {
         await updateAccount(account_phone, { pending_action: null, pending_data: null });
-        return await searchAndFormatClinics(recipient, null, lang);
+        return await searchAndFormatClinics(recipient, null, lang, isSelf);
       }
       if (returningClinic.name) updateClinicInsight(account_phone, returningClinic).catch(() => {});
       await updateAccount(account_phone, {
@@ -819,14 +846,14 @@ async function handlePendingAction(account, messageText, lang, recipient) {
         pending_data: { selected_clinic: returningClinic },
       });
       return {
-        english: `📞 *${returningClinic.name}*\n\n${returningClinic.phone}\n\n📍 ${returningClinic.address}\n\nCall to book your appointment. Once done, reply *Yes* to confirm.\nVisited today instead? Reply *Walk-in*.`,
-        marathi: `📞 *${returningClinic.name}*\n\n${returningClinic.phone}\n\n📍 ${returningClinic.address}\n\nAppointment साठी call करा. झाल्यावर *हो* म्हणा.\nआज भेटलात? *Walk-in* म्हणा.`,
-        hindi:   `📞 *${returningClinic.name}*\n\n${returningClinic.phone}\n\n📍 ${returningClinic.address}\n\nAppointment के लिए call करें। हो जाने पर *हाँ* कहें।\nआज मिले? *Walk-in* कहें।`,
+        english: `📞 *${returningClinic.name}*\n\n${returningClinic.phone}\n\n📍 ${returningClinic.address}\n\nCall to book ${isSelf ? 'your' : `${recipientName}'s`} appointment. Once done, reply *Yes* to confirm.\nVisited today instead? Reply *Walk-in*.`,
+        marathi: `📞 *${returningClinic.name}*\n\n${returningClinic.phone}\n\n📍 ${returningClinic.address}\n\n${isSelf ? 'तुमच्या' : `${recipientName} यांच्या`} appointment साठी call करा. झाल्यावर *हो* म्हणा.\nआज भेटलात? *Walk-in* म्हणा.`,
+        hindi:   `📞 *${returningClinic.name}*\n\n${returningClinic.phone}\n\n📍 ${returningClinic.address}\n\n${isSelf ? 'आपकी' : `${recipientName} की`} appointment के लिए call करें। हो जाने पर *हाँ* कहें।\nआज मिले? *Walk-in* कहें।`,
       }[lang];
     }
 
     await updateAccount(account_phone, { pending_action: null, pending_data: null });
-    return await searchAndFormatClinics(recipient, null, lang);
+    return await searchAndFormatClinics(recipient, null, lang, isSelf);
   }
 
   if (pending_action === 'medication_conflict') {
@@ -859,16 +886,25 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       pending_data: { medicines, current_index, collected_schedules },
     });
     const isSelf = account.account_type === 'self';
+    const rNameConflict = recipient?.recipient_name || 'they';
     return choice === '1'
       ? {
-          english: `Got it, *${conflict_old}* removed. How many times a day do ${isSelf ? 'you' : recipient?.recipient_name || 'they'} take *${medicines[current_index]}*?`,
-          marathi: `ठीक आहे, *${conflict_old}* बंद केली. तुम्ही *${medicines[current_index]}* दिवसातून किती वेळा घेता?`,
-          hindi:   `ठीक है, *${conflict_old}* बंद कर दी। आप *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`,
+          english: `Got it, *${conflict_old}* removed. How many times a day do ${isSelf ? 'you' : rNameConflict} take *${medicines[current_index]}*?`,
+          marathi: isSelf
+            ? `ठीक आहे, *${conflict_old}* बंद केली. तुम्ही *${medicines[current_index]}* दिवसातून किती वेळा घेता?`
+            : `ठीक आहे, *${conflict_old}* बंद केली. ${rNameConflict} *${medicines[current_index]}* दिवसातून किती वेळा घेतात?`,
+          hindi: isSelf
+            ? `ठीक है, *${conflict_old}* बंद कर दी। आप *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`
+            : `ठीक है, *${conflict_old}* बंद कर दी। ${rNameConflict} *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`,
         }[lang]
       : {
-          english: `Understood, taking both. How many times a day do ${isSelf ? 'you' : recipient?.recipient_name || 'they'} take *${medicines[current_index]}*?`,
-          marathi: `समजलं, दोन्ही घ्यायच्या. तुम्ही *${medicines[current_index]}* दिवसातून किती वेळा घेता?`,
-          hindi:   `समझ गया, दोनों लेनी हैं। आप *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`,
+          english: `Understood, taking both. How many times a day do ${isSelf ? 'you' : rNameConflict} take *${medicines[current_index]}*?`,
+          marathi: isSelf
+            ? `समजलं, दोन्ही घ्यायच्या. तुम्ही *${medicines[current_index]}* दिवसातून किती वेळा घेता?`
+            : `समजलं, दोन्ही घ्यायच्या. ${rNameConflict} *${medicines[current_index]}* दिवसातून किती वेळा घेतात?`,
+          hindi: isSelf
+            ? `समझ गया, दोनों लेनी हैं। आप *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`
+            : `समझ गया, दोनों लेनी हैं। ${rNameConflict} *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`,
         }[lang];
   }
 
@@ -965,11 +1001,19 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
       (recipient.major_illnesses || []).length > 0 ||
       recipient.medical_history;
     if (!hasHealthCardData) {
+      const isSelf15 = account.account_type === 'self';
+      const rName15 = recipient?.recipient_name || 'them';
       await updateAccount(account.account_phone, { pending_action: 'health_card_offer_pending' });
       return {
-        english: `You haven't set up your health card yet.\n\nWould you like to set it up now? Reply *Yes* to start or *No* to skip for now.`,
-        marathi: `तुमचे health card अजून सेट केलेले नाही.\n\nआत्ता सेट करायचे आहे का? सुरू करण्यासाठी *हो* म्हणा किंवा नंतरसाठी *नको* म्हणा.`,
-        hindi:   `आपका health card अभी सेट नहीं हुआ है.\n\nअभी सेट करना चाहते हैं? शुरू करने के लिए *हाँ* कहें या अभी छोड़ना हो तो *नहीं* लिखें.`,
+        english: isSelf15
+          ? `You haven't set up your health card yet.\n\nWould you like to set it up now? Reply *Yes* to start or *No* to skip for now.`
+          : `${rName15}'s health card hasn't been set up yet.\n\nWould you like to set it up now? Reply *Yes* to start or *No* to skip for now.`,
+        marathi: isSelf15
+          ? `तुमचे health card अजून सेट केलेले नाही.\n\nआत्ता सेट करायचे आहे का? सुरू करण्यासाठी *हो* म्हणा किंवा नंतरसाठी *नको* म्हणा.`
+          : `${rName15} यांचे health card अजून सेट केलेले नाही.\n\nआत्ता सेट करायचे आहे का? सुरू करण्यासाठी *हो* म्हणा किंवा नंतरसाठी *नको* म्हणा.`,
+        hindi: isSelf15
+          ? `आपका health card अभी सेट नहीं हुआ है.\n\nअभी सेट करना चाहते हैं? शुरू करने के लिए *हाँ* कहें या अभी छोड़ना हो तो *नहीं* लिखें.`
+          : `${rName15} का health card अभी सेट नहीं हुआ है.\n\nअभी सेट करना चाहते हैं? शुरू करने के लिए *हाँ* कहें या अभी छोड़ना हो तो *नहीं* लिखें.`,
       }[lang];
     }
     return generateHealthCard(recipient);
@@ -995,10 +1039,12 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
       if (question) return question;
     }
 
+    const isSelf16 = account.account_type === 'self';
+    const rName16 = recipient?.recipient_name || 'them';
     return {
-      english: `Which part of your health card would you like to update?\n\n• Blood group\n• Allergy (add)\n• Illness (add)\n• Surgery (add)\n• Medical history\n\nE.g., type *update blood group* or *add allergy Penicillin*`,
-      marathi: `तुमच्या health card मध्ये काय update करायचे आहे?\n\n• Blood group\n• Allergy (add)\n• Illness (add)\n• Surgery (add)\n• Medical history\n\nउदा. *blood group update करा* किंवा *allergy add करा Penicillin*`,
-      hindi:   `आपके health card में क्या update करना है?\n\n• Blood group\n• Allergy (add)\n• Illness (add)\n• Surgery (add)\n• Medical history\n\nजैसे *blood group update karo* या *allergy add karo Penicillin*`,
+      english: `Which part of ${isSelf16 ? 'your' : `${rName16}'s`} health card would you like to update?\n\n• Blood group\n• Allergy (add)\n• Illness (add)\n• Surgery (add)\n• Medical history\n\nE.g., type *update blood group* or *add allergy Penicillin*`,
+      marathi: `${isSelf16 ? 'तुमच्या' : `${rName16} यांच्या`} health card मध्ये काय update करायचे आहे?\n\n• Blood group\n• Allergy (add)\n• Illness (add)\n• Surgery (add)\n• Medical history\n\nउदा. *blood group update करा* किंवा *allergy add करा Penicillin*`,
+      hindi:   `${isSelf16 ? 'आपके' : `${rName16} के`} health card में क्या update करना है?\n\n• Blood group\n• Allergy (add)\n• Illness (add)\n• Surgery (add)\n• Medical history\n\nजैसे *blood group update karo* या *allergy add karo Penicillin*`,
     }[lang];
   }
 
@@ -1050,35 +1096,46 @@ async function handleConfirmAppointment(messageText, account, lang, recipient) {
     appointment_datetime: details.datetime_iso,
   });
 
-  const familyContacts = recipient.family_contacts || [];
+  const isSelf = account.account_type === 'self';
+  const recipientName = recipient?.recipient_name || 'them';
+  const toE164Confirm = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
+  const familyContacts = (recipient.family_contacts || []).filter(p => toE164Confirm(p) !== account.account_phone);
   if (familyContacts.length > 0) {
     const familyMsg = {
       marathi: `📅 ${recipient.recipient_name} यांची appointment confirm झाली.\n\n🏥 ${details.clinic_name || 'Doctor'}${details.date_display ? '\n📅 ' + details.date_display : ''}\n🕐 ${details.time_display}\n\n— CareProxy`,
       hindi:   `📅 ${recipient.recipient_name} की appointment confirm हो गई।\n\n🏥 ${details.clinic_name || 'Doctor'}${details.date_display ? '\n📅 ' + details.date_display : ''}\n🕐 ${details.time_display}\n\n— CareProxy`,
     }[lang] || `📅 ${recipient.recipient_name} has confirmed a doctor appointment at ${details.clinic_name || 'a clinic'}${details.date_display ? ' on ' + details.date_display : ''} at ${details.time_display}.`;
 
-    const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
-    await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
+    await Promise.all(familyContacts.map(p => sendTextMessage(toE164Confirm(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
   }
 
   await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
 
+  const familyNote = familyContacts.length > 0 ? { english: ' Family has been notified.', marathi: ' कुटुंबाला कळवले.', hindi: ' परिवार को बता दिया।' }[lang] : '';
   return {
-    english: `✅ Appointment noted at *${details.clinic_name || 'doctor'}*${details.date_display ? ' on ' + details.date_display : ''} at ${details.time_display}. Your family has been notified. I'll remind you 1 hour before. 🔔\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
-    marathi: `✅ *${details.clinic_name || 'Doctor'}* येथे${details.date_display ? ' ' + details.date_display + ' ला' : ''} ${details.time_display} ची appointment नोंदवली. कुटुंबाला कळवले. 1 तास आधी reminder येईल. 🔔\n\nDoctor ने नवीन औषधे दिली का? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
-    hindi:   `✅ *${details.clinic_name || 'Doctor'}* में${details.date_display ? ' ' + details.date_display + ' को' : ''} ${details.time_display} की appointment दर्ज हुई। परिवार को बता दिया। 1 घंटे पहले reminder आएगा। 🔔\n\nDoctor ने कोई नई दवाइयाँ दी हैं? नाम बताएं, मैं reminders सेट कर दूंगा।\n\nनहीं दी तो *skip* लिखें।`,
+    english: `✅ Appointment noted at *${details.clinic_name || 'doctor'}*${details.date_display ? ' on ' + details.date_display : ''} at ${details.time_display}.${familyNote} I'll remind ${isSelf ? 'you' : recipientName} 1 hour before. 🔔\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
+    marathi: `✅ *${details.clinic_name || 'Doctor'}* येथे${details.date_display ? ' ' + details.date_display + ' ला' : ''} ${details.time_display} ची appointment नोंदवली.${familyNote} 1 तास आधी reminder येईल. 🔔\n\nDoctor ने नवीन औषधे दिली का? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
+    hindi:   `✅ *${details.clinic_name || 'Doctor'}* में${details.date_display ? ' ' + details.date_display + ' को' : ''} ${details.time_display} की appointment दर्ज हुई।${familyNote} 1 घंटे पहले reminder आएगा। 🔔\n\nDoctor ने कोई नई दवाइयाँ दी हैं? नाम बताएं, मैं reminders सेट कर दूंगा।\n\nनहीं दी तो *skip* लिखें।`,
   }[lang];
 }
 
 async function handleBookAppointment(parsed, account, lang, recipient) {
   const appointmentType = parsed.details?.appointment_type;
+  const isSelf = account.account_type === 'self';
+  const recipientName = recipient?.recipient_name || 'them';
 
   // No address — can't search
   if (!recipient?.home_address) {
     return {
-      english: 'I could not find your home address. Please complete your profile setup first.',
-      marathi: 'तुमचा पत्ता सापडला नाही. कृपया आधी प्रोफाइल सेटअप पूर्ण करा.',
-      hindi:   'आपका पता नहीं मिला। पहले प्रोफाइल सेटअप पूर्ण करें।',
+      english: isSelf
+        ? 'I could not find your home address. Please complete your profile setup first.'
+        : `I could not find ${recipientName}'s home address. Please complete the profile setup first.`,
+      marathi: isSelf
+        ? 'तुमचा पत्ता सापडला नाही. कृपया आधी प्रोफाइल सेटअप पूर्ण करा.'
+        : `${recipientName} यांचा पत्ता सापडला नाही. कृपया आधी प्रोफाइल सेटअप पूर्ण करा.`,
+      hindi: isSelf
+        ? 'आपका पता नहीं मिला। पहले प्रोफाइल सेटअप पूर्ण करें।'
+        : `${recipientName} का पता नहीं मिला। पहले प्रोफाइल सेटअप पूर्ण करें।`,
     }[lang];
   }
 
@@ -1086,9 +1143,9 @@ async function handleBookAppointment(parsed, account, lang, recipient) {
   if (!appointmentType || appointmentType === 'null') {
     await updateAccount(account.account_phone, { pending_action: 'appointment_type' });
     return {
-      english: `Do you need a general check-up at a nearby clinic, or a specialist at a hospital?\n\n1. Nearby clinic (general)\n2. Specialist at hospital\n\nReply 1 or 2`,
-      marathi: `तुम्हाला जवळच्या क्लिनिकमध्ये सामान्य तपासणी हवी आहे, की हॉस्पिटलमध्ये तज्ज्ञ डॉक्टर?\n\n1. जवळचे क्लिनिक (सामान्य)\n2. हॉस्पिटलमध्ये तज्ज्ञ\n\n1 किंवा 2 reply करा`,
-      hindi:   `क्या आपको नज़दीकी क्लिनिक में सामान्य जांच चाहिए, या अस्पताल में विशेषज्ञ?\n\n1. नज़दीकी क्लिनिक (सामान्य)\n2. अस्पताल में विशेषज्ञ\n\n1 या 2 reply करें`,
+      english: `Does ${isSelf ? 'you' : recipientName} need a general check-up at a nearby clinic, or a specialist at a hospital?\n\n1. Nearby clinic (general)\n2. Specialist at hospital\n\nReply 1 or 2`,
+      marathi: `${isSelf ? 'तुम्हाला' : `${recipientName} यांना`} जवळच्या क्लिनिकमध्ये सामान्य तपासणी हवी आहे, की हॉस्पिटलमध्ये तज्ज्ञ डॉक्टर?\n\n1. जवळचे क्लिनिक (सामान्य)\n2. हॉस्पिटलमध्ये तज्ज्ञ\n\n1 किंवा 2 reply करा`,
+      hindi:   `${isSelf ? 'क्या आपको' : `क्या ${recipientName} को`} नज़दीकी क्लिनिक में सामान्य जांच चाहिए, या अस्पताल में विशेषज्ञ?\n\n1. नज़दीकी क्लिनिक (सामान्य)\n2. अस्पताल में विशेषज्ञ\n\n1 या 2 reply करें`,
     }[lang];
   }
 
@@ -1096,9 +1153,9 @@ async function handleBookAppointment(parsed, account, lang, recipient) {
   if (appointmentType === 'specialist' && !parsed.details?.specialty) {
     await updateAccount(account.account_phone, { pending_action: 'specialist_type' });
     return {
-      english: 'Which type of specialist do you need?\n\nFor example: eye, heart, bones, skin, ENT, teeth',
-      marathi: 'कोणत्या प्रकारचे तज्ज्ञ डॉक्टर हवे आहेत?\n\nउदाहरण: डोळे, हृदय, हाडे, त्वचा, कान-नाक-घसा, दात',
-      hindi:   'किस प्रकार के विशेषज्ञ डॉक्टर चाहिए?\n\nउदाहरण: आँख, दिल, हड्डी, त्वचा, कान-नाक-गला, दाँत',
+      english: `Which type of specialist does ${isSelf ? 'you' : recipientName} need?\n\nFor example: eye, heart, bones, skin, ENT, teeth`,
+      marathi: `${isSelf ? 'तुम्हाला' : `${recipientName} यांना`} कोणत्या प्रकारचे तज्ज्ञ डॉक्टर हवे आहेत?\n\nउदाहरण: डोळे, हृदय, हाडे, त्वचा, कान-नाक-घसा, दात`,
+      hindi:   `${isSelf ? 'आपको' : `${recipientName} को`} किस प्रकार के विशेषज्ञ डॉक्टर चाहिए?\n\nउदाहरण: आँख, दिल, हड्डी, त्वचा, कान-नाक-गला, दाँत`,
     }[lang];
   }
 
@@ -1112,9 +1169,13 @@ async function handleBookAppointment(parsed, account, lang, recipient) {
         pending_data: { returning_clinic: returningClinic },
       });
       return {
-        english: `You've visited *${returningClinic.name}* before.\nWould you like to go there again?\n\n1. Yes, ${returningClinic.name}\n2. No, find a different clinic\n\nReply 1 or 2`,
-        marathi: `पूर्वी *${returningClinic.name}* येथे गेला होतात.\nपुन्हा तेथेच जायचे आहे का?\n\n1. हो, ${returningClinic.name}\n2. नाही, नवीन clinic शोधा\n\n1 किंवा 2 reply करा`,
-        hindi:   `पहले *${returningClinic.name}* में गए थे।\nवहीं जाना है?\n\n1. हाँ, ${returningClinic.name}\n2. नहीं, नई clinic खोजें\n\n1 या 2 reply करें`,
+        english: `${isSelf ? 'You have' : `${recipientName} has`} visited *${returningClinic.name}* before.\nWould you like to go there again?\n\n1. Yes, ${returningClinic.name}\n2. No, find a different clinic\n\nReply 1 or 2`,
+        marathi: isSelf
+          ? `पूर्वी *${returningClinic.name}* येथे गेला होतात.\nपुन्हा तेथेच जायचे आहे का?\n\n1. हो, ${returningClinic.name}\n2. नाही, नवीन clinic शोधा\n\n1 किंवा 2 reply करा`
+          : `${recipientName} पूर्वी *${returningClinic.name}* येथे गेले होते.\nपुन्हा तेथेच जायचे आहे का?\n\n1. हो, ${returningClinic.name}\n2. नाही, नवीन clinic शोधा\n\n1 किंवा 2 reply करा`,
+        hindi: isSelf
+          ? `पहले *${returningClinic.name}* में गए थे।\nवहीं जाना है?\n\n1. हाँ, ${returningClinic.name}\n2. नहीं, नई clinic खोजें\n\n1 या 2 reply करें`
+          : `${recipientName} पहले *${returningClinic.name}* में गए थे।\nवहीं जाना है?\n\n1. हाँ, ${returningClinic.name}\n2. नहीं, नई clinic खोजें\n\n1 या 2 reply करें`,
       }[lang];
     }
   }
@@ -1128,18 +1189,18 @@ async function handleBookAppointment(parsed, account, lang, recipient) {
     await updateAccount(account.account_phone, { pending_action: 'saved_doctor_choice' });
     const doctor = savedDoctors[0];
     return {
-      english: `Do you want to book at your saved doctor (${doctor.info}), or find a nearby clinic?\n\n1. My saved doctor\n2. Find nearby clinic\n\nReply 1 or 2`,
-      marathi: `तुमच्या नेहमीच्या डॉक्टरकडे (${doctor.info}) appointment बुक करायची आहे, की जवळचे क्लिनिक शोधायचे?\n\n1. माझे नेहमीचे डॉक्टर\n2. जवळचे क्लिनिक शोधा\n\n1 किंवा 2 reply करा`,
-      hindi:   `क्या आप अपने पुराने डॉक्टर (${doctor.info}) के यहाँ appointment बुक करना चाहते हैं, या नज़दीकी क्लिनिक खोजें?\n\n1. मेरे पुराने डॉक्टर\n2. नज़दीकी क्लिनिक खोजें\n\n1 या 2 reply करें`,
+      english: `Do you want to book at ${isSelf ? 'your' : `${recipientName}'s`} saved doctor (${doctor.info}), or find a nearby clinic?\n\n1. ${isSelf ? 'My' : `${recipientName}'s`} saved doctor\n2. Find nearby clinic\n\nReply 1 or 2`,
+      marathi: `${isSelf ? 'तुमच्या' : `${recipientName} यांच्या`} नेहमीच्या डॉक्टरकडे (${doctor.info}) appointment बुक करायची आहे, की जवळचे क्लिनिक शोधायचे?\n\n1. ${isSelf ? 'माझे' : `${recipientName} यांचे`} नेहमीचे डॉक्टर\n2. जवळचे क्लिनिक शोधा\n\n1 किंवा 2 reply करा`,
+      hindi:   `${isSelf ? 'आप अपने' : `${recipientName} के`} पुराने डॉक्टर (${doctor.info}) के यहाँ appointment बुक करना चाहते हैं, या नज़दीकी क्लिनिक खोजें?\n\n1. ${isSelf ? 'मेरे' : `${recipientName} के`} पुराने डॉक्टर\n2. नज़दीकी क्लिनिक खोजें\n\n1 या 2 reply करें`,
     }[lang];
   }
 
   // Search clinics directly
   const specialty = appointmentType === 'specialist' ? parsed.details?.specialty : null;
-  return await searchAndFormatClinics(recipient, specialty, lang);
+  return await searchAndFormatClinics(recipient, specialty, lang, isSelf);
 }
 
-async function searchAndFormatClinics(recipient, specialty, lang) {
+async function searchAndFormatClinics(recipient, specialty, lang, isSelf = true) {
   let clinics, nextPageToken;
   try {
     ({ clinics, nextPageToken } = await findNearbyClinics(recipient.home_address, specialty));
@@ -1154,9 +1215,9 @@ async function searchAndFormatClinics(recipient, specialty, lang) {
 
   if (!clinics.length) {
     return {
-      english: 'Sorry, I could not find any clinics near your address. Please try again.',
-      marathi: 'माफ करा, तुमच्या पत्त्याजवळ क्लिनिक सापडले नाही. कृपया पुन्हा प्रयत्न करा.',
-      hindi:   'माफ़ करें, आपके पते के पास कोई क्लिनिक नहीं मिला। कृपया फिर से प्रयास करें।',
+      english: `Sorry, I could not find any clinics near ${isSelf ? 'your' : `${recipient?.recipient_name || 'the saved'}`} address. Please try again.`,
+      marathi: `माफ करा, ${isSelf ? 'तुमच्या' : `${recipient?.recipient_name || 'नोंदवलेल्या'} यांच्या`} पत्त्याजवळ क्लिनिक सापडले नाही. कृपया पुन्हा प्रयत्न करा.`,
+      hindi:   `माफ़ करें, ${isSelf ? 'आपके' : `${recipient?.recipient_name || 'दर्ज'} के`} पते के पास कोई क्लिनिक नहीं मिला। कृपया फिर से प्रयास करें।`,
     }[lang];
   }
 
@@ -1167,14 +1228,14 @@ async function searchAndFormatClinics(recipient, specialty, lang) {
     },
   });
 
-  return formatClinicList(clinics, specialty, lang, !!nextPageToken);
+  return formatClinicList(clinics, specialty, lang, !!nextPageToken, isSelf, recipient?.recipient_name || '');
 }
 
-function formatClinicList(clinics, specialty, lang, hasMore) {
+function formatClinicList(clinics, specialty, lang, hasMore, isSelf = true, recipientName = '') {
   const header = {
-    english: `Here are the nearest ${specialty ? specialty + ' hospitals' : 'clinics'} near you:\n\n`,
-    marathi: `तुमच्या जवळचे ${specialty ? specialty + ' हॉस्पिटल' : 'क्लिनिक'}:\n\n`,
-    hindi:   `आपके पास के ${specialty ? specialty + ' अस्पताल' : 'क्लिनिक'}:\n\n`,
+    english: `Here are the nearest ${specialty ? specialty + ' hospitals' : 'clinics'} near ${isSelf ? 'you' : `${recipientName}'s home`}:\n\n`,
+    marathi: `${isSelf ? 'तुमच्या' : `${recipientName} यांच्या`} जवळचे ${specialty ? specialty + ' हॉस्पिटल' : 'क्लिनिक'}:\n\n`,
+    hindi:   `${isSelf ? 'आपके' : `${recipientName} के`} पास के ${specialty ? specialty + ' अस्पताल' : 'क्लिनिक'}:\n\n`,
   }[lang];
 
   const list = clinics.map((c, i) => {
@@ -1206,10 +1267,15 @@ function isSOS(text) {
 }
 
 async function handleSOS(account, lang, recipient) {
+  const isSelf = account.account_type === 'self';
   const name = recipient?.recipient_name || 'Your family member';
   const address = recipient?.home_address || 'their home';
-  const familyContacts = recipient?.family_contacts || [];
   const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
+  const familyContacts = [...new Set(
+    (recipient?.family_contacts || [])
+      .filter(p => toE164(p) !== account.account_phone)
+      .map(toE164)
+  )];
 
   const hasHealthCard = !!(
     recipient?.blood_group ||
@@ -1228,15 +1294,14 @@ async function handleSOS(account, lang, recipient) {
       ? `🚑 एम्बुलेंस नंबर:\n\n• सरकारी एम्बुलेंस: tel:108\n• पुलिस + आपातकाल: tel:112`
       : `🚑 Ambulance नंबर:\n\n• सरकारी Ambulance: tel:108\n• पोलीस + आपत्काल: tel:112`;
 
-    const contacts = [...new Set(familyContacts.map(toE164))];
-    await Promise.all(contacts.flatMap(p => [
+    await Promise.all(familyContacts.flatMap(p => [
       sendTextMessage(p, alertMsg).catch(e => console.error(`SOS alert failed to ${p.slice(0, 5)}***:`, e.message)),
       sendTextMessage(p, ambulanceMsg).catch(e => console.error(`SOS ambulance failed to ${p.slice(0, 5)}***:`, e.message)),
     ]));
 
     if (hasHealthCard) {
       const healthCard = generateHealthCard(recipient);
-      await Promise.all(contacts.map(p =>
+      await Promise.all(familyContacts.map(p =>
         sendTextMessage(p, healthCard).catch(e => console.error(`SOS health card failed to ${p.slice(0, 5)}***:`, e.message))
       ));
     }
@@ -1248,10 +1313,14 @@ async function handleSOS(account, lang, recipient) {
     hindi:   '\n\nनोट: Health card अभी सेट नहीं है। सेट करने के लिए *health card* लिखें.',
   }[lang] : '';
 
+  const familyAlerted = familyContacts.length > 0
+    ? { english: 'Family has been alerted.', marathi: 'कुटुंबाला कळवले.', hindi: 'परिवार को सूचित किया।' }[lang]
+    : '';
+
   return {
-    english: `🆘 Emergency!\n\nCall *108* now: tel:108\nOr dial *112*: tel:112\n\nYour family has been alerted.${cardNote}`,
-    marathi: `🆘 आपत्कालीन स्थिती!\n\n*108* वर तात्काळ फोन करा: tel:108\nकिंवा *112*: tel:112\n\nकुटुंबाला कळवले.${cardNote}`,
-    hindi:   `🆘 आपातकाल!\n\n*108* पर तुरंत फोन करें: tel:108\nया *112*: tel:112\n\nपरिवार को सूचित किया।${cardNote}`,
+    english: `🆘 Emergency!\n\nCall *108* now: tel:108\nOr dial *112*: tel:112\n\n${familyAlerted}${cardNote}`,
+    marathi: `🆘 आपत्कालीन स्थिती!\n\n*108* वर तात्काळ फोन करा: tel:108\nकिंवा *112*: tel:112\n\n${familyAlerted}${cardNote}`,
+    hindi:   `🆘 आपातकाल!\n\n*108* पर तुरंत फोन करें: tel:108\nया *112*: tel:112\n\n${familyAlerted}${cardNote}`,
   }[lang];
 }
 

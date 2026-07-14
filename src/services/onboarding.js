@@ -35,9 +35,15 @@ const Q = {
   },
 
   contacts: {
-    english: `Share up to 2 contact numbers to notify in emergencies. You can enter 10-digit numbers (e.g. 9876543210).`,
-    marathi: `आपत्कालीन परिस्थितीत सूचित करायच्या 2 जणांचे नंबर द्या. 10 आकडी नंबर चालेल (उदा. 9876543210).`,
-    hindi:   `आपातकाल में सूचित करने के लिए 2 संपर्क नंबर दें. 10 अंक का नंबर चलेगा (जैसे 9876543210).`,
+    english: (isSelf) => isSelf
+      ? `Share up to 2 contact numbers to notify in emergencies. You can enter 10-digit numbers (e.g. 9876543210).`
+      : `Your number has already been added as an emergency contact. Share 1 more contact number for additional support (optional). 10-digit number (e.g. 9876543210).\n\nType *skip* if none.`,
+    marathi: (isSelf) => isSelf
+      ? `आपत्कालीन परिस्थितीत सूचित करायच्या 2 जणांचे नंबर द्या. 10 आकडी नंबर चालेल (उदा. 9876543210).`
+      : `तुमचा नंबर आधीच जोडला आहे. आणखी 1 संपर्क नंबर द्या (पर्यायी). 10 आकडी नंबर (उदा. 9876543210).\n\nकोणी नसल्यास *skip* टाइप करा.`,
+    hindi: (isSelf) => isSelf
+      ? `आपातकाल में सूचित करने के लिए 2 संपर्क नंबर दें. 10 अंक का नंबर चलेगा (जैसे 9876543210).`
+      : `आपका नंबर पहले से जोड़ा गया है। 1 और संपर्क नंबर दें (वैकल्पिक)। 10 अंक का नंबर (जैसे 9876543210).\n\nकोई नहीं तो *skip* लिखें.`,
   },
 
   doctor: {
@@ -47,9 +53,9 @@ const Q = {
   },
 
   complete: {
-    english: (name) => `All set! CareProxy is ready for ${name}.\n\nYou can now:\n• Locate nearby clinics to book doctor appointment\n• Set medication reminders\n• Get emergency help\n\nJust send a message anytime.`,
-    marathi: (name) => `सर्व तयार! CareProxy ${name} यांच्यासाठी तयार आहे.\n\nआता तुम्ही:\n• Doctor appointment साठी जवळचे clinic शोधा\n• औषधांची आठवण सेट करा\n• आपत्कालीन मदत मिळवा\n\nकधीही संदेश करा.`,
-    hindi:   (name) => `सब तैयार! CareProxy ${name} के लिए तैयार है.\n\nअब आप:\n• Doctor appointment के लिए नज़दीकी clinic खोजें\n• दवाई reminder सेट करें\n• आपातकालीन मदद लें\n\nकभी भी message करें.`,
+    english: (name, isSelf) => `All set! CareProxy is ready for ${name}.\n\nYou can now${isSelf ? '' : ` help ${name} with`}:\n• Locate nearby clinics to book doctor appointment\n• Set medication reminders\n• Get emergency help\n\nJust send a message anytime.`,
+    marathi: (name, isSelf) => `सर्व तयार! CareProxy ${name} यांच्यासाठी तयार आहे.\n\nआता तुम्ही${isSelf ? '' : ` ${name} यांना मदत करू शकता`}:\n• Doctor appointment साठी जवळचे clinic शोधा\n• औषधांची आठवण सेट करा\n• आपत्कालीन मदत मिळवा\n\nकधीही संदेश करा.`,
+    hindi:   (name, isSelf) => `सब तैयार! CareProxy ${name} के लिए तैयार है.\n\nअब आप${isSelf ? '' : ` ${name} की मदद कर सकते हैं`}:\n• Doctor appointment के लिए नज़दीकी clinic खोजें\n• दवाई reminder सेट करें\n• आपातकालीन मदद लें\n\nकभी भी message करें.`,
   },
 };
 
@@ -131,7 +137,7 @@ export async function handleOnboarding(account, messageText) {
       });
       return data.account_type === 'caregiver'
         ? Q.recipient_phone[lang](data.recipient_name || '')
-        : Q.contacts[lang];
+        : Q.contacts[lang](true);
     }
 
     case 'recipient_phone': {
@@ -148,7 +154,7 @@ export async function handleOnboarding(account, messageText) {
         onboarding_step: 'contacts',
         onboarding_data: { ...data, recipient_phone: recipientPhone },
       });
-      return Q.contacts[lang];
+      return Q.contacts[lang](false);
     }
 
     case 'contacts': {
@@ -171,7 +177,7 @@ export async function handleOnboarding(account, messageText) {
         onboarding_step: 'complete',
         onboarding_data: null,
       });
-      return Q.complete[lang](data.recipient_name || 'you');
+      return Q.complete[lang](data.recipient_name || 'you', data.account_type !== 'caregiver');
     }
 
     default: {

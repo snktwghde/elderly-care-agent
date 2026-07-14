@@ -64,7 +64,7 @@ async function processReminders() {
     if (!recipient) continue;
 
     const lang = recipient.preferred_language === 'hindi' ? 'hindi' : 'marathi';
-    const userPhone = toWhatsAppPhone(appt.account_phone);
+    const userPhone = toWhatsAppPhone(recipient.recipient_phone || appt.account_phone);
     const clinic = appt.clinic_name || 'Doctor';
     const name   = recipient.recipient_name;
     const dt     = appt.appointment_datetime;
@@ -100,7 +100,7 @@ async function processMedicationReminders() {
     if (!schedules?.length) continue;
 
     const lang = recipient.preferred_language === 'hindi' ? 'hindi' : 'marathi';
-    const phone = toWhatsAppPhone(recipient.account_phone);
+    const phone = toWhatsAppPhone(recipient.recipient_phone || recipient.account_phone);
 
     for (let medIndex = 0; medIndex < schedules.length; medIndex++) {
       const schedule = schedules[medIndex];

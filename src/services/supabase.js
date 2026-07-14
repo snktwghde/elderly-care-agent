@@ -149,7 +149,7 @@ export async function updateCareRecipient(accountPhone, fields) {
 export async function getMedicationSchedules() {
   const { data, error } = await supabase
     .from('care_recipients')
-    .select('account_phone, recipient_name, preferred_language, family_contacts, medication_schedule')
+    .select('account_phone, recipient_phone, recipient_name, preferred_language, family_contacts, medication_schedule')
     .not('medication_schedule', 'is', null);
   if (error) throw new Error(`Failed to get medication schedules: ${error.message}`);
   return (data || []).filter(r => r.medication_schedule?.length > 0);
