@@ -923,7 +923,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }[lang];
     }
     if (choice === '3') {
-      return await startHealthCardSetup(account_phone, lang);
+      return await startHealthCardSetup(account_phone, lang, account.account_type === 'self', recipient?.recipient_name || '');
     }
     return {
       english: `Please reply 1, 2, or 3:\n\n1. Find a clinic\n2. Set medication reminder\n3. Set up health card`,
@@ -1020,7 +1020,7 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
   }
 
   if (parsed.intent === 'setup_health_card') {
-    return await startHealthCardSetup(account.account_phone, lang);
+    return await startHealthCardSetup(account.account_phone, lang, account.account_type === 'self', recipient?.recipient_name || '');
   }
 
   if (parsed.intent === 'update_health_card') {

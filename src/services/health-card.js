@@ -71,7 +71,7 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
   if (pending_action === 'health_card_offer_pending') {
     const isYes = /^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|हो\s*जी|हां|ho ja)$/i.test(input);
 
-    if (isYes) return await startHealthCardSetup(account_phone, lang);
+    if (isYes) return await startHealthCardSetup(account_phone, lang, isSelf, recipient?.recipient_name || '');
 
     await updateAccount(account_phone, { pending_action: 'health_card_declined_next_step' });
     return {
