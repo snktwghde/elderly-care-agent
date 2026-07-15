@@ -8,7 +8,7 @@ const SYSTEM_PROMPT = `You are a WhatsApp message parser for CareProxy, an elder
 
 Parse the incoming WhatsApp message and return ONLY valid JSON with this shape:
 {
-  "intent": "<one of: book_appointment | confirm_appointment | medication_reminder | sos | status_check | setup_health_card | show_health_card | update_health_card | unknown>",
+  "intent": "<one of: book_appointment | confirm_appointment | medication_reminder | sos | setup_health_card | show_health_card | update_health_card | unknown>",
   "language": "<one of: hindi | marathi | english | mixed>",
   "confidence": "<one of: high | medium | low>",
   "details": {

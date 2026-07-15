@@ -1087,11 +1087,6 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
       marathi: 'आपत्कालीन परिस्थिती समजली! कुटुंबाला संदेश पाठवत आहोत.',
       hindi:   'आपातकाल समझ गए! परिवार को सूचित कर रहे हैं।',
     },
-    status_check: {
-      english: 'Checking your appointment status.',
-      marathi: 'तुमच्या अपॉइंटमेंटची स्थिती तपासत आहोत.',
-      hindi:   'आपकी अपॉइंटमेंट का स्टेटस चेक कर रहे हैं।',
-    },
     default: {
       english: 'I can help you with doctor appointments, medication reminders, or emergency help. What do you need?',
       marathi: 'मी डॉक्टर अपॉइंटमेंट, औषधांची आठवण किंवा आपत्कालीन मदतीसाठी मदत करू शकतो. काय हवे आहे?',
