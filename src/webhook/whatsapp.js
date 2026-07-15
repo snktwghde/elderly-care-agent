@@ -549,7 +549,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       const rNameApptType = recipient?.recipient_name || 'them';
       await updateAccount(account_phone, { pending_action: 'specialist_type' });
       return {
-        english: `Which type of specialist does ${isSelfApptType ? 'you' : rNameApptType} need?\n\nFor example: eye, heart, bones, skin, ENT, teeth`,
+        english: `Which type of specialist ${isSelfApptType ? 'do you' : `does ${rNameApptType}`} need?\n\nFor example: eye, heart, bones, skin, ENT, teeth`,
         marathi: `${isSelfApptType ? 'तुम्हाला' : `${rNameApptType} यांना`} कोणत्या प्रकारचे तज्ज्ञ डॉक्टर हवे आहेत?\n\nउदाहरण: डोळे, हृदय, हाडे, त्वचा, कान-नाक-घसा, दात`,
         hindi:   `${isSelfApptType ? 'आपको' : `${rNameApptType} को`} किस प्रकार के विशेषज्ञ डॉक्टर चाहिए?\n\nउदाहरण: आँख, दिल, हड्डी, त्वचा, कान-नाक-गला, दाँत`,
       }[lang];
@@ -1176,7 +1176,7 @@ async function handleBookAppointment(parsed, account, lang, recipient) {
   if (!appointmentType || appointmentType === 'null') {
     await updateAccount(account.account_phone, { pending_action: 'appointment_type' });
     return {
-      english: `Does ${isSelf ? 'you' : recipientName} need a general check-up at a nearby clinic, or a specialist at a hospital?\n\n1. Nearby clinic (general)\n2. Specialist at hospital\n\nReply 1 or 2`,
+      english: `${isSelf ? 'Do you' : `Does ${recipientName}`} need a general check-up at a nearby clinic, or a specialist at a hospital?\n\n1. Nearby clinic (general)\n2. Specialist at hospital\n\nReply 1 or 2`,
       marathi: `${isSelf ? 'तुम्हाला' : `${recipientName} यांना`} जवळच्या क्लिनिकमध्ये सामान्य तपासणी हवी आहे, की हॉस्पिटलमध्ये तज्ज्ञ डॉक्टर?\n\n1. जवळचे क्लिनिक (सामान्य)\n2. हॉस्पिटलमध्ये तज्ज्ञ\n\n1 किंवा 2 reply करा`,
       hindi:   `${isSelf ? 'क्या आपको' : `क्या ${recipientName} को`} नज़दीकी क्लिनिक में सामान्य जांच चाहिए, या अस्पताल में विशेषज्ञ?\n\n1. नज़दीकी क्लिनिक (सामान्य)\n2. अस्पताल में विशेषज्ञ\n\n1 या 2 reply करें`,
     }[lang];
@@ -1186,7 +1186,7 @@ async function handleBookAppointment(parsed, account, lang, recipient) {
   if (appointmentType === 'specialist' && !parsed.details?.specialty) {
     await updateAccount(account.account_phone, { pending_action: 'specialist_type' });
     return {
-      english: `Which type of specialist does ${isSelf ? 'you' : recipientName} need?\n\nFor example: eye, heart, bones, skin, ENT, teeth`,
+      english: `Which type of specialist ${isSelf ? 'do you' : `does ${recipientName}`} need?\n\nFor example: eye, heart, bones, skin, ENT, teeth`,
       marathi: `${isSelf ? 'तुम्हाला' : `${recipientName} यांना`} कोणत्या प्रकारचे तज्ज्ञ डॉक्टर हवे आहेत?\n\nउदाहरण: डोळे, हृदय, हाडे, त्वचा, कान-नाक-घसा, दात`,
       hindi:   `${isSelf ? 'आपको' : `${recipientName} को`} किस प्रकार के विशेषज्ञ डॉक्टर चाहिए?\n\nउदाहरण: आँख, दिल, हड्डी, त्वचा, कान-नाक-गला, दाँत`,
     }[lang];
