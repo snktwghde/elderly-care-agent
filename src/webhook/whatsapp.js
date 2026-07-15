@@ -246,6 +246,11 @@ function isNewCommandOverride(text, account) {
     return /\b(medication|reminder|औषध|दवाई|cancel|रद्द|start over)\b/i.test(text.trim());
   }
 
+  // Post-appointment state: only skip and prescribed medicines stay in handler; everything else goes to intent detection
+  if (pending_action === 'awaiting_post_appointment') {
+    return !/^(skip|prescribed medicines?|prescribed medicine|नको|नहीं|prescription)$/i.test(text.trim());
+  }
+
   // Numeric-reply states: break out on broader command keywords
   const numericStates = ['returning_clinic_choice', 'appointment_type', 'saved_doctor_choice', 'medication_conflict'];
   if (!numericStates.includes(pending_action)) return false;
@@ -366,7 +371,7 @@ async function confirmAndSaveAppointment({ account, account_phone, recipient, la
 
   try {
     await updateAccount(account_phone, {
-      pending_action: 'awaiting_medication_names',
+      pending_action: 'awaiting_post_appointment',
       pending_data: { is_prescription: true },
     });
   } catch (e) {
@@ -572,6 +577,39 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   if (pending_action === 'specialist_type') {
     await updateAccount(account_phone, { pending_action: null });
     return await searchAndFormatClinics(recipient, messageText.trim(), lang, account.account_type === 'self');
+  }
+
+  if (pending_action === 'awaiting_post_appointment') {
+    const isSkip = /^(skip|नको|नहीं)$/i.test(messageText.trim());
+    const isPrescription = /\b(prescribed medicines?|prescribed medicine|prescription)\b/i.test(messageText.trim());
+    if (isSkip) {
+      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      return {
+        english: 'Okay! Message me anytime for appointments, medication reminders, or emergencies.',
+        marathi: 'ठीक आहे! appointments, औषध reminders किंवा emergency साठी कधीही message करा.',
+        hindi:   'ठीक है! appointments, दवाई reminders, या emergency के लिए कभी भी message करें।',
+      }[lang];
+    }
+    if (isPrescription) {
+      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
+      const isSelf = account.account_type === 'self';
+      const rName = recipient?.recipient_name || 'them';
+      return {
+        english: `What are the names of the medicines the doctor prescribed? (e.g. Amoxicillin, Metformin)\n\nYou can list multiple — I'll set reminders for each.`,
+        marathi: isSelf
+          ? `Doctor ने कोणती औषधे दिली? (उदा. Amoxicillin, Metformin)\n\nएकापेक्षा जास्त असल्यास सर्व सांगा — प्रत्येकासाठी reminder सेट करतो.`
+          : `Doctor ने ${rName} यांना कोणती औषधे दिली? (उदा. Amoxicillin, Metformin)\n\nएकापेक्षा जास्त असल्यास सर्व सांगा — प्रत्येकासाठी reminder सेट करतो.`,
+        hindi: isSelf
+          ? `Doctor ने कौन सी दवाइयाँ दी हैं? (जैसे Amoxicillin, Metformin)\n\nएक से ज़्यादा हैं तो सब बताएं — हर एक के लिए reminder सेट करूंगा।`
+          : `Doctor ने ${rName} को कौन सी दवाइयाँ दी हैं? (जैसे Amoxicillin, Metformin)\n\nएक से ज़्यादा हैं तो सब बताएं — हर एक के लिए reminder सेट करूंगा।`,
+      }[lang];
+    }
+    // Shouldn't reach here (isNewCommandOverride routes everything else to intent detection)
+    return {
+      english: 'After the doctor visit, type *prescribed medicines* to set reminders, or *skip* if no prescription given.',
+      marathi: 'Doctor ला भेटल्यानंतर *prescribed medicines* टाइप करा, किंवा prescription नसल्यास *skip* टाइप करा.',
+      hindi:   'Doctor से मिलने के बाद *prescribed medicines* लिखें, या prescription नहीं मिली तो *skip* लिखें।',
+    }[lang];
   }
 
   if (pending_action === 'awaiting_medication_names') {
@@ -1104,7 +1142,7 @@ async function handleConfirmAppointment(messageText, account, lang, recipient) {
     await Promise.all(familyContacts.map(p => sendTextMessage(toE164Confirm(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
   }
 
-  await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
+  await updateAccount(account.account_phone, { pending_action: 'awaiting_post_appointment', pending_data: { is_prescription: true } });
 
   const familyNote = familyContacts.length > 0 ? { english: ' Family has been notified.', marathi: ' कुटुंबाला कळवले.', hindi: ' परिवार को बता दिया।' }[lang] : '';
   return {
