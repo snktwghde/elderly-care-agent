@@ -112,15 +112,17 @@ async function processMedicationReminders() {
     const isSelfMed = toWhatsAppPhone(recipient.recipient_phone) === toWhatsAppPhone(recipient.account_phone);
 
     // ─── Handle expired medicine courses ─────────────────────────────────────
-    const expiredMeds = schedules.filter(s => s.end_date && todayStr > s.end_date);
+    const expiredMeds = schedules.filter(s => s.end_date && todayStr >= s.end_date);
     if (expiredMeds.length > 0) {
-      const kept = schedules.filter(s => !(s.end_date && todayStr > s.end_date));
+      const kept = schedules.filter(s => !(s.end_date && todayStr >= s.end_date));
       await updateCareRecipient(recipient.account_phone, { medication_schedule: kept });
+      // Send to account_phone (bot controller) — in caregiver flow, recipient_phone is the elderly person who can't interact with the bot
+      const accountPhone = toWhatsAppPhone(recipient.account_phone);
       for (const expired of expiredMeds) {
         const msg = lang === 'hindi'
           ? `✅ *${expired.name}* का कोर्स पूरा हो गया — reminders बंद कर दिए।\n\nनई दवाई का reminder सेट करना है? *yes* या *skip* लिखें।`
           : `✅ *${expired.name}* चा कोर्स पूर्ण झाला — reminders थांबवले.\n\nनवीन औषधाचे reminder सेट करायचे आहे का? *yes* किंवा *skip* म्हणा.`;
-        await sendTextMessage(phone, msg).catch(e => console.error(`Course complete msg failed to ${phone.slice(0, 5)}***:`, e.message));
+        await sendTextMessage(accountPhone, msg).catch(e => console.error(`Course complete msg failed to ${accountPhone.slice(0, 5)}***:`, e.message));
       }
       await updateAccount(recipient.account_phone, { pending_action: 'awaiting_post_course_response', pending_data: null });
     }
@@ -129,7 +131,7 @@ async function processMedicationReminders() {
     for (let medIndex = 0; medIndex < schedules.length; medIndex++) {
       const schedule = schedules[medIndex];
       if (!schedule?.times?.length) continue;
-      if (schedule.end_date && todayStr > schedule.end_date) continue;
+      if (schedule.end_date && todayStr >= schedule.end_date) continue;
 
       for (let slot = 0; slot < schedule.times.length; slot++) {
         const diff = timeToMinutes(current) - timeToMinutes(schedule.times[slot]);

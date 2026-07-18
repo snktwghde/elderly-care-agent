@@ -251,6 +251,11 @@ function isNewCommandOverride(text, account) {
     return !/^(skip|prescribed medicines?|prescribed medicine|नको|नहीं|prescription)$/i.test(text.trim());
   }
 
+  // Post-course-complete state: only yes/skip stay in handler; everything else (e.g. "book appointment") goes to intent detection
+  if (pending_action === 'awaiting_post_course_response') {
+    return !/^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|sure|हां|bilkul|skip|नको|नहीं)$/i.test(text.trim());
+  }
+
   // Numeric-reply states: break out on broader command keywords
   const numericStates = ['returning_clinic_choice', 'appointment_type', 'saved_doctor_choice', 'medication_conflict'];
   if (!numericStates.includes(pending_action)) return false;
