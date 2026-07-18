@@ -766,32 +766,83 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
     const updatedSchedules = [...collected_schedules, { name: currentMedicine, frequency: freq, times }];
     const nextIndex = current_index + 1;
+    const isPrescription = account.pending_data?.is_prescription || false;
+    const isSelf23 = account.account_type === 'self';
+
+    await updateAccount(account_phone, {
+      pending_action: 'awaiting_medication_duration',
+      pending_data: { medicines, current_index, next_index: nextIndex, collected_schedules: updatedSchedules, is_prescription: isPrescription },
+    });
+
+    return isPrescription ? {
+      english: `Got it! How many days has the doctor advised to take *${currentMedicine}*? (e.g. 7 days, 2 weeks, 1 month, or type *lifetime* if ongoing)`,
+      marathi: `ठीक आहे! Doctor ने *${currentMedicine}* किती दिवस घेण्यास सांगितले? (उदा. 7 दिवस, 2 आठवडे, 1 महिना, किंवा *lifetime* टाइप करा नेहमीसाठी)`,
+      hindi:   `ठीक है! Doctor ने *${currentMedicine}* कितने दिन लेने की सलाह दी? (जैसे 7 दिन, 2 हफ्ते, 1 महीना, या *lifetime* लिखें अगर हमेशा के लिए)`,
+    }[lang] : isSelf23 ? {
+      english: `Got it! How long are you advised to take *${currentMedicine}*? (e.g. 7 days, 2 weeks, 1 month, or type *lifetime* if ongoing)`,
+      marathi: `ठीक आहे! *${currentMedicine}* किती दिवस घ्यायचे? (उदा. 7 दिवस, 2 आठवडे, 1 महिना, किंवा *lifetime* टाइप करा नेहमीसाठी)`,
+      hindi:   `ठीक है! *${currentMedicine}* कितने दिन लेना है? (जैसे 7 दिन, 2 हफ्ते, 1 महीना, या *lifetime* लिखें अगर हमेशा के लिए)`,
+    }[lang] : {
+      english: `Got it! How long is ${recipient?.recipient_name || 'they'} advised to take *${currentMedicine}*? (e.g. 7 days, 2 weeks, 1 month, or type *lifetime* if ongoing)`,
+      marathi: `ठीक आहे! ${recipient?.recipient_name || 'ते'} *${currentMedicine}* किती दिवस घेणार आहेत? (उदा. 7 दिवस, 2 आठवडे, 1 महिना, किंवा *lifetime* टाइप करा नेहमीसाठी)`,
+      hindi:   `ठीक है! ${recipient?.recipient_name || 'वे'} *${currentMedicine}* कितने दिन लेंगे? (जैसे 7 दिन, 2 हफ्ते, 1 महीना, या *lifetime* लिखें अगर हमेशा के लिए)`,
+    }[lang];
+  }
+
+  if (pending_action === 'awaiting_medication_duration') {
+    if (!account.pending_data?.medicines) {
+      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      return {
+        english: 'Something went wrong. Please start again.',
+        marathi: 'काहीतरी चुकले. पुन्हा सुरू करा.',
+        hindi:   'कुछ गलत हुआ। फिर से शुरू करें।',
+      }[lang];
+    }
+
+    const { medicines, current_index, next_index: nextIndex, collected_schedules, is_prescription: isPrescription } = account.pending_data;
+    const durationDays = parseDuration(messageText);
+
+    if (durationDays === -1) {
+      return {
+        english: `Couldn't understand that. Please say something like: *7 days*, *2 weeks*, *1 month*, or *lifetime*.`,
+        marathi: `समजले नाही. उदा: *7 दिवस*, *2 आठवडे*, *1 महिना*, किंवा *lifetime*.`,
+        hindi:   `समझ नहीं आया। जैसे: *7 दिन*, *2 हफ्ते*, *1 महीना*, या *lifetime*.`,
+      }[lang];
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const endDate = durationDays === null ? null : addDays(today, durationDays);
+
+    // Attach start/end dates to the last medicine in collected_schedules
+    const updatedSchedules = collected_schedules.map((s, i) =>
+      i === collected_schedules.length - 1 ? { ...s, start_date: today, end_date: endDate } : s
+    );
+
+    const isSelf = account.account_type === 'self';
+    const rName = recipient?.recipient_name || 'they';
 
     // More medicines to collect
-    const isPrescription = account.pending_data?.is_prescription || false;
     if (nextIndex < medicines.length) {
       await updateAccount(account_phone, {
         pending_action: 'awaiting_medication_frequency',
         pending_data: { medicines, current_index: nextIndex, collected_schedules: updatedSchedules, is_prescription: isPrescription },
       });
-      const isSelf22 = account.account_type === 'self';
-      const rName22 = recipient?.recipient_name || 'they';
       return isPrescription ? {
         english: `Got it! How many times a day has the doctor advised to take *${medicines[nextIndex]}*?`,
         marathi: `ठीक आहे! Doctor ने *${medicines[nextIndex]}* दिवसातून किती वेळा घेण्यास सांगितले?`,
         hindi:   `ठीक है! Doctor ने *${medicines[nextIndex]}* दिन में कितनी बार लेने की सलाह दी?`,
       }[lang] : {
-        english: `Got it! Now, how many times a day do ${isSelf22 ? 'you' : rName22} take *${medicines[nextIndex]}*?`,
-        marathi: isSelf22
+        english: `Got it! Now, how many times a day do ${isSelf ? 'you' : rName} take *${medicines[nextIndex]}*?`,
+        marathi: isSelf
           ? `ठीक आहे! आता, *${medicines[nextIndex]}* दिवसातून किती वेळा घेता?`
-          : `ठीक आहे! आता, ${rName22} *${medicines[nextIndex]}* दिवसातून किती वेळा घेतात?`,
-        hindi: isSelf22
+          : `ठीक आहे! आता, ${rName} *${medicines[nextIndex]}* दिवसातून किती वेळा घेतात?`,
+        hindi: isSelf
           ? `ठीक है! अब, *${medicines[nextIndex]}* दिन में कितनी बार लेते हैं?`
-          : `ठीक है! अब, ${rName22} *${medicines[nextIndex]}* दिन में कितनी बार लेते हैं?`,
+          : `ठीक है! अब, ${rName} *${medicines[nextIndex]}* दिन में कितनी बार लेते हैं?`,
       }[lang];
     }
 
-    // All medicines collected — merge with existing schedule (don't overwrite)
+    // All medicines collected — save
     const existingRecipient = await getPrimaryCareRecipient(account_phone);
     const existingSchedule = existingRecipient?.medication_schedule || [];
     const newNames = new Set(updatedSchedules.map(s => s.name.toLowerCase()));
@@ -805,23 +856,32 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const toE164Med = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
     const familyContacts = (recipient?.family_contacts || []).filter(p => toE164Med(p) !== account_phone);
     if (familyContacts.length > 0) {
-      const summary = updatedSchedules.map(s =>
-        `• ${s.name}: ${s.times.map(displayTime).join(', ')} (${s.frequency}x daily)`
-      ).join('\n');
+      const summary = updatedSchedules.map(s => {
+        const durLabel = s.end_date
+          ? ` until ${s.end_date}`
+          : s.end_date === null ? ' (lifetime)' : '';
+        return `• ${s.name}: ${s.times.map(displayTime).join(', ')} (${s.frequency}x daily${durLabel})`;
+      }).join('\n');
       const familyMsg = lang === 'hindi'
         ? `💊 ${recipient.recipient_name} की दवाइयों के reminders सेट हो गए।\n\n${summary}\n\n— CareProxy`
         : `💊 ${recipient.recipient_name} यांच्या औषधांचे reminders सेट झाले.\n\n${summary}\n\n— CareProxy`;
       await Promise.all(familyContacts.map(p => sendTextMessage(toE164Med(p), familyMsg).catch(e => console.error(`Send failed to ${p}:`, e.message))));
     }
 
-    const confirmSummary = updatedSchedules.map(s =>
-      `💊 *${s.name}* — ${s.times.map(displayTime).join(', ')}`
-    ).join('\n');
+    const confirmSummary = updatedSchedules.map(s => {
+      let durLabel = '';
+      if (s.end_date === null) durLabel = ' (lifetime)';
+      else if (s.end_date && s.start_date) {
+        const days = Math.round((new Date(s.end_date) - new Date(s.start_date)) / 86400000);
+        const durText = days % 30 === 0 ? `${days / 30} month${days / 30 > 1 ? 's' : ''}` : days % 7 === 0 ? `${days / 7} week${days / 7 > 1 ? 's' : ''}` : `${days} days`;
+        durLabel = ` (${durText})`;
+      }
+      return `💊 *${s.name}* — ${s.times.map(displayTime).join(', ')}${durLabel}`;
+    }).join('\n');
 
     const familyNote = familyContacts.length > 0 ? { english: '\n\nFamily has been informed.', marathi: '\n\nकुटुंबाला यादी कळवली.', hindi: '\n\nपरिवार को सूची भेज दी।' }[lang] : '';
 
     if (isPrescription) {
-      const isSelf = account.account_type === 'self';
       const recipientName = recipient?.recipient_name || (isSelf ? 'you' : 'they');
       await updateAccount(account_phone, { pending_action: 'awaiting_post_prescription_prompt', pending_data: null });
       return {
@@ -841,6 +901,25 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       english: `✅ All reminders set!\n\n${confirmSummary}${familyNote}${closingMsg}`,
       marathi: `✅ सर्व reminders सेट झाले!\n\n${confirmSummary}${familyNote}${closingMsg}`,
       hindi:   `✅ सभी reminders सेट हो गए!\n\n${confirmSummary}${familyNote}${closingMsg}`,
+    }[lang];
+  }
+
+  if (pending_action === 'awaiting_post_course_response') {
+    const isYes = /^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|sure|हां|bilkul)$/i.test(choice);
+    if (isYes) {
+      const isSelf = account.account_type === 'self';
+      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: false } });
+      return {
+        english: `What medications do ${isSelf ? 'you' : (recipient?.recipient_name || 'they')} take regularly? Tell me the names.`,
+        marathi: `${isSelf ? 'तुम्ही' : recipient?.recipient_name || 'ते'} कोणती औषधे नियमित घेतात? नावे सांगा.`,
+        hindi:   `${isSelf ? 'आप' : recipient?.recipient_name || 'वे'} नियमित कौन सी दवाइयाँ लेते हैं? नाम बताएं।`,
+      }[lang];
+    }
+    await updateAccount(account_phone, { pending_action: null, pending_data: null });
+    return {
+      english: `No problem! Message me anytime for appointments, medication reminders, or emergencies.`,
+      marathi: `ठीक आहे! कधीही appointment, औषध reminder किंवा आपत्काल — फक्त message करा.`,
+      hindi:   `कोई बात नहीं! कभी भी appointment, दवाई reminder या आपातकाल के लिए message करें।`,
     }[lang];
   }
 
@@ -1390,6 +1469,26 @@ function parseTimeInput(text, frequency) {
     if (h >= 0 && h <= 23) matches.push(`${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`);
   }
   return [...new Set(matches)].slice(0, frequency);
+}
+
+function parseDuration(text) {
+  const t = text.trim().toLowerCase();
+  if (/^(lifetime|always|ongoing|forever|हमेशा|आजीवन|कायमचे|जीवनभर|सदा)$/i.test(t)) return null;
+  const weeks = t.match(/(\d+)\s*(week|आठवड|हफ्त|hafta)/i);
+  if (weeks) return parseInt(weeks[1]) * 7;
+  const months = t.match(/(\d+)\s*(month|महिन|mahina|महीन)/i);
+  if (months) return parseInt(months[1]) * 30;
+  const days = t.match(/(\d+)\s*(day|din|दिन|दिवस)/i);
+  if (days) return parseInt(days[1]);
+  const num = t.match(/^\d+$/);
+  if (num) return parseInt(num[0]);
+  return -1;
+}
+
+function addDays(dateStr, days) {
+  const d = new Date(dateStr);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 // ─── Subscription helpers ─────────────────────────────────────────────────────

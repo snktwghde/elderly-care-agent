@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { getDueReminders, updateAppointment, getPrimaryCareRecipient, getMedicationSchedules, getMedicationLogToday, createMedicationLog } from './supabase.js';
+import { getDueReminders, updateAppointment, getPrimaryCareRecipient, getMedicationSchedules, getMedicationLogToday, createMedicationLog, updateCareRecipient, updateAccount } from './supabase.js';
 import { sendTextMessage } from './whatsapp.js';
 
 function toWhatsAppPhone(phone) {
@@ -93,9 +93,15 @@ function currentISTTime() {
   return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
 
+function currentISTDateStr() {
+  const d = toIST(new Date().toISOString());
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
 async function processMedicationReminders() {
   const recipients = await getMedicationSchedules();
   const current = currentISTTime();
+  const todayStr = currentISTDateStr();
 
   for (const recipient of recipients) {
     const schedules = recipient.medication_schedule;
@@ -105,13 +111,29 @@ async function processMedicationReminders() {
     const phone = toWhatsAppPhone(recipient.recipient_phone || recipient.account_phone);
     const isSelfMed = toWhatsAppPhone(recipient.recipient_phone) === toWhatsAppPhone(recipient.account_phone);
 
+    // ─── Handle expired medicine courses ─────────────────────────────────────
+    const expiredMeds = schedules.filter(s => s.end_date && todayStr > s.end_date);
+    if (expiredMeds.length > 0) {
+      const kept = schedules.filter(s => !(s.end_date && todayStr > s.end_date));
+      await updateCareRecipient(recipient.account_phone, { medication_schedule: kept });
+      for (const expired of expiredMeds) {
+        const msg = lang === 'hindi'
+          ? `✅ *${expired.name}* का कोर्स पूरा हो गया — reminders बंद कर दिए।\n\nनई दवाई का reminder सेट करना है? *yes* या *skip* लिखें।`
+          : `✅ *${expired.name}* चा कोर्स पूर्ण झाला — reminders थांबवले.\n\nनवीन औषधाचे reminder सेट करायचे आहे का? *yes* किंवा *skip* म्हणा.`;
+        await sendTextMessage(phone, msg).catch(e => console.error(`Course complete msg failed to ${phone.slice(0, 5)}***:`, e.message));
+      }
+      await updateAccount(recipient.account_phone, { pending_action: 'awaiting_post_course_response', pending_data: null });
+    }
+
+    // ─── Send due reminders for active medicines ──────────────────────────────
     for (let medIndex = 0; medIndex < schedules.length; medIndex++) {
       const schedule = schedules[medIndex];
       if (!schedule?.times?.length) continue;
+      if (schedule.end_date && todayStr > schedule.end_date) continue;
 
       for (let slot = 0; slot < schedule.times.length; slot++) {
-        const diff = Math.abs(timeToMinutes(current) - timeToMinutes(schedule.times[slot]));
-        if (diff > 2) continue;
+        const diff = timeToMinutes(current) - timeToMinutes(schedule.times[slot]);
+        if (diff < -2 || diff > 10) continue;
 
         const existing = await getMedicationLogToday(recipient.account_phone, medIndex, slot);
         if (existing) continue;
