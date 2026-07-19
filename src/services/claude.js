@@ -36,7 +36,7 @@ Book appointment (specialist — only when explicitly stated):
 - "aankh ka doctor", "haddi ka doctor"
 
 SOS: "help", "emergency", "madad", "bachao", "ambulance", "mala madad kara", "मला मदत करा", "मदत करो"
-Medication: "medicine", "dawai", "tablet", "reminder", "aushadh", "औषध", "दवाई"
+Medication: "medicine", "dawai", "tablet", "reminder", "reminders", "aushadh", "औषध", "दवाई"
 Confirm appointment (user reporting they booked it themselves):
 - "appointment book zali", "appointment fixed", "appointment confirm zali", "appointment ho gaya"
 - "I booked", "booked the appointment", "doctor ne time dila", "appointment milali"

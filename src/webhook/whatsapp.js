@@ -256,8 +256,19 @@ function isNewCommandOverride(text, account) {
     return !/^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|sure|हां|bilkul|skip|नको|नहीं)$/i.test(text.trim());
   }
 
+  // Mid-medication-flow states: break out on appointment-domain keywords only
+  // ('medication'/'reminder' intentionally excluded — they appear in valid answers like "7 din ki medication")
+  if (['awaiting_medication_duration', 'awaiting_medication_frequency', 'awaiting_medication_times'].includes(pending_action)) {
+    return /\b(book|appointment|doctor|clinic|डॉक्टर|अपॉइंटमेंट|cancel|रद्द|start over)\b/i.test(text.trim());
+  }
+
+  // Medication action menu: only known actions stay; everything else goes to intent detection
+  if (pending_action === 'awaiting_medication_action') {
+    return !/^(add|replace|update)$/i.test(text.trim());
+  }
+
   // Numeric-reply states: break out on broader command keywords
-  const numericStates = ['returning_clinic_choice', 'appointment_type', 'saved_doctor_choice', 'medication_conflict'];
+  const numericStates = ['returning_clinic_choice', 'appointment_type', 'saved_doctor_choice', 'medication_conflict', 'awaiting_replace_selection', 'awaiting_update_selection'];
   if (!numericStates.includes(pending_action)) return false;
   return /\b(book|appointment|doctor|clinic|डॉक्टर|अपॉइंटमेंट|medication|reminder|औषध|दवाई|cancel|रद्द|start over)\b/i.test(text.trim());
 }
@@ -617,17 +628,106 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     }[lang];
   }
 
-  if (pending_action === 'awaiting_medication_names') {
-    if (account.pending_data?.appending && /^replace$/i.test(messageText.trim())) {
-      await updateCareRecipient(account_phone, { medication_schedule: [] });
-      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: null });
-      const isSelf = account.account_type === 'self';
+  if (pending_action === 'awaiting_medication_action') {
+    const { med_schedule = [] } = account.pending_data || {};
+    const action = messageText.trim().toLowerCase();
+
+    if (action === 'add') {
+      await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: false } });
       return {
-        english: `Okay, starting fresh. What medications do ${isSelf ? 'you' : recipient?.recipient_name || 'they'} currently take?`,
-        marathi: isSelf ? `ठीक आहे, नव्याने सुरुवात. तुम्ही सध्या कोणती औषधे घेता?` : `ठीक आहे, नव्याने सुरुवात. ${recipient?.recipient_name || 'ते'} सध्या कोणती औषधे घेतात?`,
-        hindi:   isSelf ? `ठीक है, नए सिरे से शुरू करते हैं। आप अभी कौन सी दवाइयाँ लेते हैं?` : `ठीक है, नए सिरे से। ${recipient?.recipient_name || 'वे'} अभी कौन सी दवाइयाँ लेते हैं?`,
+        english: `What new medicines would you like to add? Tell me the names.`,
+        marathi: `कोणती नवीन औषधे जोडायची आहेत? नावे सांगा.`,
+        hindi:   `कौन सी नई दवाइयाँ जोड़नी हैं? नाम बताएं।`,
       }[lang];
     }
+
+    if (action === 'replace') {
+      const medList = med_schedule.map((s, i) => `${i + 1}. *${s.name}*`).join('\n');
+      await updateAccount(account_phone, { pending_action: 'awaiting_replace_selection', pending_data: { med_schedule } });
+      return {
+        english: `Which medicine would you like to replace?\n\n${medList}\n\nReply with the number.`,
+        marathi: `कोणते औषध बदलायचे आहे?\n\n${medList}\n\nनंबर reply करा.`,
+        hindi:   `कौन सी दवाई बदलनी है?\n\n${medList}\n\nनंबर से reply करें।`,
+      }[lang];
+    }
+
+    if (action === 'update') {
+      const medList = med_schedule.map((s, i) => {
+        const times = (s.times || []).map(displayTime).join(', ');
+        return `${i + 1}. *${s.name}* (${s.frequency}x daily, ${times})`;
+      }).join('\n');
+      await updateAccount(account_phone, { pending_action: 'awaiting_update_selection', pending_data: { med_schedule } });
+      return {
+        english: `Which medicine's schedule would you like to update?\n\n${medList}\n\nReply with the number.`,
+        marathi: `कोणत्या औषधाचे वेळापत्रक बदलायचे आहे?\n\n${medList}\n\nनंबर reply करा.`,
+        hindi:   `किस दवाई का समय बदलना है?\n\n${medList}\n\nनंबर से reply करें।`,
+      }[lang];
+    }
+
+    return {
+      english: `Please reply with:\n*add* — Add new medicines\n*replace* — Replace a medicine (doctor changed the drug)\n*update* — Update the schedule of a medicine (e.g., 1x daily → 2x daily)`,
+      marathi: `कृपया reply करा:\n*add* — नवीन औषधे जोडा\n*replace* — औषध बदला (doctor ने वेगळे सांगितले)\n*update* — वेळापत्रक बदला (उदा. दिवसातून 1 वेळ → 2 वेळा)`,
+      hindi:   `कृपया reply करें:\n*add* — नई दवाइयाँ जोड़ें\n*replace* — दवाई बदलें (doctor ने दूसरी दी)\n*update* — समय बदलें (जैसे दिन में 1 बार → 2 बार)`,
+    }[lang];
+  }
+
+  if (pending_action === 'awaiting_replace_selection') {
+    const { med_schedule = [] } = account.pending_data || {};
+    const idx = parseInt(messageText.trim()) - 1;
+
+    if (isNaN(idx) || idx < 0 || idx >= med_schedule.length) {
+      return {
+        english: `Please reply with a number between 1 and ${med_schedule.length}.`,
+        marathi: `कृपया 1 ते ${med_schedule.length} मधील नंबर reply करा.`,
+        hindi:   `कृपया 1 से ${med_schedule.length} के बीच नंबर से reply करें।`,
+      }[lang];
+    }
+
+    const removed = med_schedule[idx];
+    const fresh = await getPrimaryCareRecipient(account_phone);
+    const freshSchedule = fresh?.medication_schedule || [];
+    const newSchedule = freshSchedule.filter(s => s.name.toLowerCase() !== removed.name.toLowerCase());
+    await updateCareRecipient(account_phone, { medication_schedule: newSchedule });
+    removeMedicationFromInsight(account_phone, removed.name).catch(() => {});
+    await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: false } });
+    return {
+      english: `*${removed.name}* removed. What is the new medicine the doctor has prescribed? Tell me the name.`,
+      marathi: `*${removed.name}* काढले. Doctor ने नवीन कोणते औषध सांगितले? नाव सांगा.`,
+      hindi:   `*${removed.name}* हटा दिया। Doctor ने नई कौन सी दवाई दी? नाम बताएं।`,
+    }[lang];
+  }
+
+  if (pending_action === 'awaiting_update_selection') {
+    const { med_schedule = [] } = account.pending_data || {};
+    const idx = parseInt(messageText.trim()) - 1;
+
+    if (isNaN(idx) || idx < 0 || idx >= med_schedule.length) {
+      return {
+        english: `Please reply with a number between 1 and ${med_schedule.length}.`,
+        marathi: `कृपया 1 ते ${med_schedule.length} मधील नंबर reply करा.`,
+        hindi:   `कृपया 1 से ${med_schedule.length} के बीच नंबर से reply करें।`,
+      }[lang];
+    }
+
+    const selected = med_schedule[idx];
+    const isSelf = account.account_type === 'self';
+    const rName = recipient?.recipient_name || 'they';
+    await updateAccount(account_phone, {
+      pending_action: 'awaiting_medication_frequency',
+      pending_data: { medicines: [selected.name], current_index: 0, collected_schedules: [], is_prescription: false },
+    });
+    return {
+      english: `Updating *${selected.name}*. How many times a day do ${isSelf ? 'you' : rName} take it now?`,
+      marathi: isSelf
+        ? `*${selected.name}* update करत आहे. आता दिवसातून किती वेळा घेता?`
+        : `*${selected.name}* update करत आहे. ${rName} आता दिवसातून किती वेळा घेतात?`,
+      hindi: isSelf
+        ? `*${selected.name}* update हो रहा है। अब दिन में कितनी बार लेते हैं?`
+        : `*${selected.name}* update हो रहा है। ${rName} अब दिन में कितनी बार लेते हैं?`,
+    }[lang];
+  }
+
+  if (pending_action === 'awaiting_medication_names') {
     if (/^(skip|नको|नहीं|no thanks|nope|later|ok|okay|done|fine|alright|theek|thik)$/i.test(messageText.trim())) {
       await updateAccount(account_phone, { pending_action: null, pending_data: null });
       return {
@@ -1082,21 +1182,24 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
   }
 
   if (parsed.intent === 'medication_reminder') {
-    const existingMeds = (recipient?.medication_schedule || []).map(m => m.name).filter(Boolean);
     const isSelf = account.account_type === 'self';
     const name = isSelf ? (lang === 'english' ? 'you' : null) : recipient?.recipient_name || 'they';
+    const medSchedule = recipient?.medication_schedule || [];
 
-    if (existingMeds.length > 0) {
-      await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names', pending_data: { appending: true } });
-      const medList = existingMeds.join(', ');
+    if (medSchedule.length > 0) {
+      await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_action', pending_data: { med_schedule: medSchedule } });
+      const medList = medSchedule.map((s, i) => `${i + 1}. *${s.name}*`).join('\n');
+      const menuHeader = isSelf
+        ? { english: 'Your current medicines:', marathi: 'सध्याची औषधे:', hindi: 'आपकी मौजूदा दवाइयाँ:' }[lang]
+        : { english: `${name}'s current medicines:`, marathi: `${name} यांची सध्याची औषधे:`, hindi: `${name} की मौजूदा दवाइयाँ:` }[lang];
       return {
-        english: `${isSelf ? 'You' : name} already have these medications saved: *${medList}*.\n\nWhat new medications would you like to add? Or type *replace* to start fresh.`,
-        marathi: `${isSelf ? 'तुमच्याकडे' : `${name} यांच्याकडे`} आधीच ही औषधे सेव्ह आहेत: *${medList}*.\n\nकोणती नवीन औषधे add करायची आहेत? किंवा सगळी बदलायची असल्यास *replace* टाइप करा.`,
-        hindi:   `${isSelf ? 'आपकी' : `${name} की`} ये दवाइयाँ पहले से saved हैं: *${medList}*.\n\nकौन सी नई दवाइयाँ add करनी हैं? या सब बदलना हो तो *replace* लिखें.`,
+        english: `${menuHeader}\n${medList}\n\nWhat would you like to do?\n*add* — Add new medicines\n*replace* — Replace a medicine (doctor changed the drug)\n*update* — Update the schedule of a medicine (e.g., 1x daily → 2x daily)`,
+        marathi: `${menuHeader}\n${medList}\n\nकाय करायचे आहे?\n*add* — नवीन औषधे जोडा\n*replace* — औषध बदला (doctor ने वेगळे सांगितले)\n*update* — वेळापत्रक बदला (उदा. दिवसातून 1 वेळ → 2 वेळा)`,
+        hindi:   `${menuHeader}\n${medList}\n\nक्या करना है?\n*add* — नई दवाइयाँ जोड़ें\n*replace* — दवाई बदलें (doctor ने दूसरी दी)\n*update* — समय बदलें (जैसे दिन में 1 बार → 2 बार)`,
       }[lang];
     }
 
-    await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names' });
+    await updateAccount(account.account_phone, { pending_action: 'awaiting_medication_names', pending_data: null });
     return {
       english: `What medications do ${isSelf ? 'you' : name} currently take?`,
       marathi: isSelf ? `तुम्ही सध्या कोणती औषधे घेता?` : `${name} सध्या कोणती औषधे घेतात?`,
@@ -1483,7 +1586,7 @@ function parseDuration(text) {
   if (weeks) return parseInt(weeks[1]) * 7;
   const months = t.match(/(\d+)\s*(month|महिन|mahina|महीन)/i);
   if (months) return parseInt(months[1]) * 30;
-  const days = t.match(/(\d+)\s*(day|din|दिन|दिवस)/i);
+  const days = t.match(/(\d+)\s*(day|din|दिन|दिवस|divas)/i);
   if (days) return parseInt(days[1]);
   const num = t.match(/^\d+$/);
   if (num) return parseInt(num[0]);
