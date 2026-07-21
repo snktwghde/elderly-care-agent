@@ -30,14 +30,14 @@ export async function sendHealthCardOffer(phone, lang, isSelf = true, recipientN
   const whose = isSelf ? 'your' : `${recipientName}'s`;
   const subject = isSelf ? 'you' : recipientName;
   const msg = {
-    english: `Would you like to set up ${whose} health card?\n\nDoctors often ask for current medications and medical history during visits — this lets ${subject} share it instantly. (Takes about 5 minutes)\n\nReply *Yes* to set up or *No* to skip for now.`,
+    english: `Would you like to set up ${whose} health card?\n\nDoctors often ask for current medications and medical history during visits — this lets ${subject} share it instantly. (Takes about 5 minutes)\n\nReply *Yes* to set up or *Skip* to do it later.`,
     marathi: isSelf
-      ? `तुमचे health card सेट करायचे आहे का?\n\nडॉक्टरांना visit दरम्यान नेहमी medications आणि medical history विचारावी लागते — health card असल्यास ते लगेच share करता येते. (सुमारे 5 मिनिटे)\n\n*हो* म्हणा सेट करण्यासाठी किंवा *नको* म्हणा नंतरसाठी.`
-      : `${recipientName} यांचे health card सेट करायचे आहे का?\n\nडॉक्टरांना visit दरम्यान नेहमी medications आणि medical history विचारावी लागते — health card असल्यास ते लगेच share करता येते. (सुमारे 5 मिनिटे)\n\n*हो* म्हणा सेट करण्यासाठी किंवा *नको* म्हणा नंतरसाठी.`,
+      ? `तुमचे health card सेट करायचे आहे का?\n\nडॉक्टरांना visit दरम्यान नेहमी medications आणि medical history विचारावी लागते — health card असल्यास ते लगेच share करता येते. (सुमारे 5 मिनिटे)\n\nसेट करण्यासाठी *Yes* म्हणा किंवा नंतर करायचे असल्यास *Skip* म्हणा.`
+      : `${recipientName} यांचे health card सेट करायचे आहे का?\n\nडॉक्टरांना visit दरम्यान नेहमी medications आणि medical history विचारावी लागते — health card असल्यास ते लगेच share करता येते. (सुमारे 5 मिनिटे)\n\nसेट करण्यासाठी *Yes* म्हणा किंवा नंतर करायचे असल्यास *Skip* म्हणा.`,
     hindi: isSelf
-      ? `क्या आप अपना health card सेट करना चाहते हैं?\n\nDoctors visit के दौरान हमेशा medications और medical history पूछते हैं — health card होने से वो तुरंत share होती है. (लगभग 5 मिनट)\n\n*हाँ* कहें सेट करने के लिए या *नहीं* बाद के लिए.`
-      : `क्या आप ${recipientName} का health card सेट करना चाहते हैं?\n\nDoctors visit के दौरान हमेशा medications और medical history पूछते हैं — health card होने से वो तुरंत share होती है. (लगभग 5 मिनट)\n\n*हाँ* कहें सेट करने के लिए या *नहीं* बाद के लिए.`,
-  }[lang] || `Would you like to set up ${whose} health card?\n\nDoctors often ask for current medications and medical history during visits — this lets ${subject} share it instantly. (Takes about 5 minutes)\n\nReply *Yes* to set up or *No* to skip for now.`;
+      ? `क्या आप अपना health card सेट करना चाहते हैं?\n\nDoctors visit के दौरान हमेशा medications और medical history पूछते हैं — health card होने से वो तुरंत share होती है. (लगभग 5 मिनट)\n\nसेट करने के लिए *Yes* कहें या बाद में करना हो तो *Skip* लिखें.`
+      : `क्या आप ${recipientName} का health card सेट करना चाहते हैं?\n\nDoctors visit के दौरान हमेशा medications और medical history पूछते हैं — health card होने से वो तुरंत share होती है. (लगभग 5 मिनट)\n\nसेट करने के लिए *Yes* कहें या बाद में करना हो तो *Skip* लिखें.`,
+  }[lang] || `Would you like to set up ${whose} health card?\n\nDoctors often ask for current medications and medical history during visits — this lets ${subject} share it instantly. (Takes about 5 minutes)\n\nReply *Yes* to set up or *Skip* to do it later.`;
 
   await updateAccount(phone, { pending_action: 'health_card_offer_pending' });
   await sendTextMessage(phone, msg);

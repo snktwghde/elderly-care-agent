@@ -1226,14 +1226,14 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
       await updateAccount(account.account_phone, { pending_action: 'health_card_offer_pending' });
       return {
         english: isSelf15
-          ? `You haven't set up your health card yet.\n\nWould you like to set it up now? Reply *Yes* to start or *No* to skip for now.`
-          : `${rName15}'s health card hasn't been set up yet.\n\nWould you like to set it up now? Reply *Yes* to start or *No* to skip for now.`,
+          ? `You haven't set up your health card yet.\n\nWould you like to set it up now? Reply *Yes* to start or *Skip* to do it later.`
+          : `${rName15}'s health card hasn't been set up yet.\n\nWould you like to set it up now? Reply *Yes* to start or *Skip* to do it later.`,
         marathi: isSelf15
-          ? `तुमचे health card अजून सेट केलेले नाही.\n\nआत्ता सेट करायचे आहे का? सुरू करण्यासाठी *हो* म्हणा किंवा नंतरसाठी *नको* म्हणा.`
-          : `${rName15} यांचे health card अजून सेट केलेले नाही.\n\nआत्ता सेट करायचे आहे का? सुरू करण्यासाठी *हो* म्हणा किंवा नंतरसाठी *नको* म्हणा.`,
+          ? `तुमचे health card अजून सेट केलेले नाही.\n\nआत्ता सेट करायचे आहे का? सुरू करण्यासाठी *Yes* म्हणा किंवा नंतर करायचे असल्यास *Skip* म्हणा.`
+          : `${rName15} यांचे health card अजून सेट केलेले नाही.\n\nआत्ता सेट करायचे आहे का? सुरू करण्यासाठी *Yes* म्हणा किंवा नंतर करायचे असल्यास *Skip* म्हणा.`,
         hindi: isSelf15
-          ? `आपका health card अभी सेट नहीं हुआ है.\n\nअभी सेट करना चाहते हैं? शुरू करने के लिए *हाँ* कहें या अभी छोड़ना हो तो *नहीं* लिखें.`
-          : `${rName15} का health card अभी सेट नहीं हुआ है.\n\nअभी सेट करना चाहते हैं? शुरू करने के लिए *हाँ* कहें या अभी छोड़ना हो तो *नहीं* लिखें.`,
+          ? `आपका health card अभी सेट नहीं हुआ है.\n\nअभी सेट करना चाहते हैं? शुरू करने के लिए *Yes* कहें या बाद में करना हो तो *Skip* लिखें.`
+          : `${rName15} का health card अभी सेट नहीं हुआ है.\n\nअभी सेट करना चाहते हैं? शुरू करने के लिए *Yes* कहें या बाद में करना हो तो *Skip* लिखें.`,
       }[lang];
     }
     return generateHealthCard(recipient);
