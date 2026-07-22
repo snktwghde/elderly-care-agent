@@ -267,8 +267,13 @@ function isNewCommandOverride(text, account) {
     return !/^(add|replace|update)$/i.test(text.trim());
   }
 
+  // Medication conflict: only replace/continue stay; everything else goes to intent detection
+  if (pending_action === 'medication_conflict') {
+    return !/^(replace|continue)$/i.test(text.trim());
+  }
+
   // Numeric-reply states: break out on broader command keywords
-  const numericStates = ['returning_clinic_choice', 'appointment_type', 'saved_doctor_choice', 'medication_conflict', 'awaiting_replace_selection', 'awaiting_update_selection'];
+  const numericStates = ['returning_clinic_choice', 'appointment_type', 'saved_doctor_choice', 'awaiting_replace_selection', 'awaiting_update_selection'];
   if (!numericStates.includes(pending_action)) return false;
   return /\b(book|appointment|doctor|clinic|डॉक्टर|अपॉइंटमेंट|medication|reminder|औषध|दवाई|cancel|रद्द|start over)\b/i.test(text.trim());
 }
@@ -769,9 +774,9 @@ async function handlePendingAction(account, messageText, lang, recipient) {
         pending_data: { conflict_old: conflictPair.oldMed, conflict_new: conflictPair.newMed, medicines, current_index: 0, collected_schedules: [] },
       });
       return {
-        english: `${isSelf ? 'You are' : `${rName} is`} already taking *${conflictPair.oldMed}*. Has the doctor asked ${isSelf ? 'you' : 'them'} to stop it and take *${conflictPair.newMed}* instead?\n\n1. Yes, stop ${conflictPair.oldMed}\n2. No, take both\n\nReply 1 or 2`,
-        marathi: `${isSelf ? 'तुम्ही' : rName} आधीच *${conflictPair.oldMed}* घेत ${isSelf ? 'आहात' : 'आहेत'}. Doctor नी ती बंद करून *${conflictPair.newMed}* घ्यायला सांगितली का?\n\n1. हो, ${conflictPair.oldMed} बंद करा\n2. नाही, दोन्ही घ्यायच्या\n\n1 किंवा 2 reply करा`,
-        hindi:   `${isSelf ? 'आप' : rName} पहले से *${conflictPair.oldMed}* ले ${isSelf ? 'रहे हैं' : 'रहे हैं'}। क्या Doctor ने इसे बंद करके *${conflictPair.newMed}* लेने को कहा?\n\n1. हाँ, ${conflictPair.oldMed} बंद करें\n2. नहीं, दोनों लेनी हैं\n\n1 या 2 reply करें`,
+        english: `${isSelf ? 'You are' : `${rName} is`} already taking *${conflictPair.oldMed}*. What did the doctor say?\n\n*replace* — Stop ${conflictPair.oldMed}, start ${conflictPair.newMed}\n*continue* — Keep ${conflictPair.oldMed} as-is, no change needed`,
+        marathi: `${isSelf ? 'तुम्ही' : rName} आधीच *${conflictPair.oldMed}* घेत ${isSelf ? 'आहात' : 'आहेत'}. Doctor नी काय सांगितलं?\n\n*replace* — ${conflictPair.oldMed} बंद करा, ${conflictPair.newMed} सुरू करा\n*continue* — ${conflictPair.oldMed} तशीच चालू ठेवा, बदल नाही`,
+        hindi:   `${isSelf ? 'आप' : rName} पहले से *${conflictPair.oldMed}* ले ${isSelf ? 'रहे हैं' : 'रहे हैं'}। Doctor ने क्या कहा?\n\n*replace* — ${conflictPair.oldMed} बंद करें, ${conflictPair.newMed} शुरू करें\n*continue* — ${conflictPair.oldMed} वैसे ही चलती रहे, कोई बदलाव नहीं`,
       }[lang];
     }
 
@@ -1075,16 +1080,18 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
   if (pending_action === 'medication_conflict') {
     const { conflict_old, conflict_new, medicines, current_index, collected_schedules } = account.pending_data;
+    const isSelf = account.account_type === 'self';
+    const rNameConflict = recipient?.recipient_name || 'they';
 
-    if (choice !== '1' && choice !== '2') {
+    if (choice !== 'replace' && choice !== 'continue') {
       return {
-        english: `Please reply with 1 or 2.`,
-        marathi: `कृपया 1 किंवा 2 reply करा.`,
-        hindi:   `कृपया 1 या 2 reply करें।`,
+        english: `Please reply *replace* or *continue*.`,
+        marathi: `कृपया *replace* किंवा *continue* reply करा.`,
+        hindi:   `कृपया *replace* या *continue* reply करें।`,
       }[lang];
     }
 
-    if (choice === '1') {
+    if (choice === 'replace') {
       const existingRecipient = await getPrimaryCareRecipient(account_phone);
       const oldBase = extractBaseName(conflict_old);
       const updatedSchedule = (existingRecipient?.medication_schedule || []).filter(
@@ -1096,33 +1103,44 @@ async function handlePendingAction(account, messageText, lang, recipient) {
         medication_schedule: updatedSchedule,
         user_insights: { ...insights, active_medications: updatedMeds },
       });
+      await updateAccount(account_phone, {
+        pending_action: 'awaiting_medication_frequency',
+        pending_data: { medicines, current_index, collected_schedules },
+      });
+      return {
+        english: `Got it, *${conflict_old}* removed. How many times a day do ${isSelf ? 'you' : rNameConflict} take *${medicines[current_index]}*?`,
+        marathi: isSelf
+          ? `ठीक आहे, *${conflict_old}* बंद केली. तुम्ही *${medicines[current_index]}* दिवसातून किती वेळा घेता?`
+          : `ठीक आहे, *${conflict_old}* बंद केली. ${rNameConflict} *${medicines[current_index]}* दिवसातून किती वेळा घेतात?`,
+        hindi: isSelf
+          ? `ठीक है, *${conflict_old}* बंद कर दी। आप *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`
+          : `ठीक है, *${conflict_old}* बंद कर दी। ${rNameConflict} *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`,
+      }[lang];
     }
 
+    // continue: keep old medicine as-is, skip the conflicting new entry
+    const remainingMedicines = medicines.filter(m => m.toLowerCase() !== conflict_new.toLowerCase());
+    if (remainingMedicines.length === 0) {
+      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      return {
+        english: `Got it, keeping *${conflict_old}* as-is. Reminders continue unchanged.`,
+        marathi: `ठीक आहे, *${conflict_old}* तशीच चालू आहे. Reminders बदलले नाहीत.`,
+        hindi:   `ठीक है, *${conflict_old}* वैसे ही चलती रहेगी। Reminders में कोई बदलाव नहीं।`,
+      }[lang];
+    }
     await updateAccount(account_phone, {
       pending_action: 'awaiting_medication_frequency',
-      pending_data: { medicines, current_index, collected_schedules },
+      pending_data: { medicines: remainingMedicines, current_index: 0, collected_schedules },
     });
-    const isSelf = account.account_type === 'self';
-    const rNameConflict = recipient?.recipient_name || 'they';
-    return choice === '1'
-      ? {
-          english: `Got it, *${conflict_old}* removed. How many times a day do ${isSelf ? 'you' : rNameConflict} take *${medicines[current_index]}*?`,
-          marathi: isSelf
-            ? `ठीक आहे, *${conflict_old}* बंद केली. तुम्ही *${medicines[current_index]}* दिवसातून किती वेळा घेता?`
-            : `ठीक आहे, *${conflict_old}* बंद केली. ${rNameConflict} *${medicines[current_index]}* दिवसातून किती वेळा घेतात?`,
-          hindi: isSelf
-            ? `ठीक है, *${conflict_old}* बंद कर दी। आप *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`
-            : `ठीक है, *${conflict_old}* बंद कर दी। ${rNameConflict} *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`,
-        }[lang]
-      : {
-          english: `Understood, taking both. How many times a day do ${isSelf ? 'you' : rNameConflict} take *${medicines[current_index]}*?`,
-          marathi: isSelf
-            ? `समजलं, दोन्ही घ्यायच्या. तुम्ही *${medicines[current_index]}* दिवसातून किती वेळा घेता?`
-            : `समजलं, दोन्ही घ्यायच्या. ${rNameConflict} *${medicines[current_index]}* दिवसातून किती वेळा घेतात?`,
-          hindi: isSelf
-            ? `समझ गया, दोनों लेनी हैं। आप *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`
-            : `समझ गया, दोनों लेनी हैं। ${rNameConflict} *${medicines[current_index]}* दिन में कितनी बार लेते हैं?`,
-        }[lang];
+    return {
+      english: `Got it, keeping *${conflict_old}* as-is. How many times a day do ${isSelf ? 'you' : rNameConflict} take *${remainingMedicines[0]}*?`,
+      marathi: isSelf
+        ? `ठीक आहे, *${conflict_old}* तशीच चालू ठेवली. तुम्ही *${remainingMedicines[0]}* दिवसातून किती वेळा घेता?`
+        : `ठीक आहे, *${conflict_old}* तशीच चालू ठेवली. ${rNameConflict} *${remainingMedicines[0]}* दिवसातून किती वेळा घेतात?`,
+      hindi: isSelf
+        ? `ठीक है, *${conflict_old}* वैसे ही रहेगी। आप *${remainingMedicines[0]}* दिन में कितनी बार लेते हैं?`
+        : `ठीक है, *${conflict_old}* वैसे ही रहेगी। ${rNameConflict} *${remainingMedicines[0]}* दिन में कितनी बार लेते हैं?`,
+    }[lang];
   }
 
   if (pending_action === 'health_card_declined_next_step') {
