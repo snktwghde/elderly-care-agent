@@ -1268,6 +1268,14 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
     }[lang];
   }
 
+  if (parsed.intent === 'unknown' && /^(no|nope|no\s?thanks|nahi|nako|nahin|नाही|नको|नहीं|theek\s?hai|thik\s?ahe|ठीक\s?है|ठीक\s?आहे)$/i.test(messageText.trim())) {
+    return {
+      english: `Got it! Message me anytime for appointments, reminders, emergency or health card.`,
+      marathi: `ठीक आहे! appointment, reminder, emergency किंवा health card साठी केव्हाही सांगा.`,
+      hindi:   `ठीक है! appointment, reminder, emergency या health card के लिए कभी भी बताएं.`,
+    }[lang];
+  }
+
   const REPLIES = {
     sos: {
       english: 'Emergency noted! Alerting your family now.',
@@ -1542,7 +1550,9 @@ async function handleSOS(account, lang, recipient) {
 // ─── Medication helpers ───────────────────────────────────────────────────────
 
 function isMedicationAck(text) {
-  return /^(done|taken|yes|हो|ha|घेतलं|ghetal|le liya|ले लिया|ok|okay|हाँ|haan|लिया|घेतले)$/i.test(text.trim());
+  const t = text.trim();
+  if (/^👍[\u{1F3FB}-\u{1F3FF}]?$/u.test(t)) return true;
+  return /^(done|taken|yes|हो|ha|घेतलं|ghetal|le liya|ले लिया|ok|okay|हाँ|haan|लिया|घेतले)$/i.test(t);
 }
 
 async function handleMedicationAck(account, lang) {
