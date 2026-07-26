@@ -44,6 +44,8 @@ const HEALTH_CARD_SETUP_STATES = [
   'health_card_illnesses',
   'health_card_surgeries',
   'health_card_history',
+  'health_card_hospitalization_when',
+  'health_card_hospitalization_reason',
 ];
 
 const HEALTH_CARD_UPDATE_STATES = [
@@ -874,6 +876,19 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }[lang];
     }
 
+    if (times.length < freq) {
+      const received = times.join(', ');
+      const needed = freq - times.length;
+      const example = freq === 2 ? '8am and 9pm' : '8am, 1pm and 9pm';
+      const exampleMr = freq === 2 ? 'सकाळी 8 आणि रात्री 9' : 'सकाळी 8, दुपारी 1 आणि रात्री 9';
+      const exampleHi = freq === 2 ? '8am और 9pm' : '8am, 1pm और 9pm';
+      return {
+        english: `You said *${freq} times a day*. I got ${times.length} time${times.length !== 1 ? 's' : ''} (${received}) — still need ${needed} more. Please send all ${freq} times together (e.g. ${example}).`,
+        marathi: `तुम्ही *दिवसातून ${freq} वेळा* म्हणालात. मला ${times.length} वेळ मिळाल्या (${received}) — अजून ${needed} हव्यात. कृपया सर्व ${freq} वेळा एकत्र पाठवा (उदा. ${exampleMr}).`,
+        hindi:   `आपने *दिन में ${freq} बार* कहा। मुझे ${times.length} समय मिले (${received}) — अभी ${needed} और चाहिए। कृपया सभी ${freq} समय एक साथ भेजें (जैसे ${exampleHi}).`,
+      }[lang];
+    }
+
     const updatedSchedules = [...collected_schedules, { name: currentMedicine, frequency: freq, times }];
     const nextIndex = current_index + 1;
     const isPrescription = account.pending_data?.is_prescription || false;
@@ -1189,6 +1204,17 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 async function buildReply(parsed, account, lang, recipient, messageText) {
   if (/^(find\s*(doctor|clinic|nearest)|nearest\s*(doctor|clinic)|doctor\s*near|clinic\s*near)/i.test(messageText.trim())) {
     return await handleBookAppointment({ intent: 'book_appointment', details: {} }, account, lang, recipient);
+  }
+
+  if (/^specialised$/i.test(messageText.trim())) {
+    const isSelfSpec = account.account_type === 'self';
+    const rNameSpec = recipient?.recipient_name || 'them';
+    await updateAccount(account.account_phone, { pending_action: 'specialist_type' });
+    return {
+      english: `Which type of specialist ${isSelfSpec ? 'do you' : `does ${rNameSpec}`} need?\n\nFor example: eye, heart, bones, skin, ENT, teeth`,
+      marathi: `${isSelfSpec ? 'तुम्हाला' : `${rNameSpec} यांना`} कोणत्या प्रकारचे तज्ज्ञ डॉक्टर हवे आहेत?\n\nउदाहरण: डोळे, हृदय, हाडे, त्वचा, कान-नाक-घसा, दात`,
+      hindi:   `${isSelfSpec ? 'आपको' : `${rNameSpec} को`} किस प्रकार के विशेषज्ञ डॉक्टर चाहिए?\n\nउदाहरण: आँख, दिल, हड्डी, त्वचा, कान-नाक-गला, दाँत`,
+    }[lang];
   }
 
   if (parsed.intent === 'book_appointment') {

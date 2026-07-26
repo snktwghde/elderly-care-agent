@@ -191,8 +191,53 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
   if (pending_action === 'health_card_history') {
     if (!isSkip) {
       await updateCareRecipient(account_phone, { medical_history: input.slice(0, 500) });
+      const mentionsHospitalisation = /\b(hospital|hospitaliz|admit|admitted|dakhil|दाखल|भर्ती|bhrti|ward|ICU)\b/i.test(input);
+      if (mentionsHospitalisation) {
+        await updateAccount(account_phone, { pending_action: 'health_card_hospitalization_when', pending_data: null });
+        return {
+          english: `When did this hospitalisation happen? (e.g. 2019, or "last year")\n\nType *skip* to finish.`,
+          marathi: `हे हॉस्पिटलायझेशन कधी झाले? (उदा. 2019, किंवा "गेल्या वर्षी")\n\nसंपवायचे असल्यास *skip* टाइप करा.`,
+          hindi:   `यह hospitalisation कब हुई? (जैसे 2019, या "पिछले साल")\n\nखत्म करने के लिए *skip* लिखें.`,
+        }[lang];
+      }
     }
     await updateAccount(account_phone, { pending_action: null });
+    return {
+      english: `✅ Health card saved!\n\nType *health card* anytime to see it. During an SOS, it will be sent automatically to your family.\n\nWhat's next: say *find doctor* to locate a nearby clinic, or *set medication reminders* to set medicine reminders.`,
+      marathi: `✅ Health card जतन झाले!\n\nकेव्हाही *health card* टाइप करा पाहण्यासाठी. SOS वेळी ते आपोआप कुटुंबाला पाठवले जाईल.\n\nपुढे काय: जवळचे clinic शोधण्यासाठी *find doctor* म्हणा, किंवा औषध reminders साठी *set medication reminders* म्हणा.`,
+      hindi: `✅ Health card सेव हो गया!\n\nकभी भी *health card* लिखें देखने के लिए। SOS के समय यह automatically परिवार को भेजा जाएगा.\n\nआगे क्या: नज़दीकी clinic खोजने के लिए *find doctor* कहें, या दवाई reminders के लिए *set medication reminders* लिखें.`,
+    }[lang];
+  }
+
+  // ── health_card_hospitalization_when ─────────────────────────────────────
+  if (pending_action === 'health_card_hospitalization_when') {
+    if (isSkip) {
+      await updateAccount(account_phone, { pending_action: null, pending_data: null });
+      return {
+        english: `✅ Health card saved!\n\nType *health card* anytime to see it. During an SOS, it will be sent automatically to your family.\n\nWhat's next: say *find doctor* to locate a nearby clinic, or *set medication reminders* to set medicine reminders.`,
+        marathi: `✅ Health card जतन झाले!\n\nकेव्हाही *health card* टाइप करा पाहण्यासाठी. SOS वेळी ते आपोआप कुटुंबाला पाठवले जाईल.\n\nपुढे काय: जवळचे clinic शोधण्यासाठी *find doctor* म्हणा, किंवा औषध reminders साठी *set medication reminders* म्हणा.`,
+        hindi: `✅ Health card सेव हो गया!\n\nकभी भी *health card* लिखें देखने के लिए। SOS के समय यह automatically परिवार को भेजा जाएगा.\n\nआगे क्या: नज़दीकी clinic खोजने के लिए *find doctor* कहें, या दवाई reminders के लिए *set medication reminders* लिखें.`,
+      }[lang];
+    }
+    await updateAccount(account_phone, { pending_action: 'health_card_hospitalization_reason', pending_data: { hospitalization_when: input.slice(0, 100) } });
+    return {
+      english: `What was the reason or condition for the hospitalisation? (e.g. heart attack, surgery, fracture)\n\nType *skip* to finish.`,
+      marathi: `हॉस्पिटलायझेशनचे कारण काय होते? (उदा. heart attack, शस्त्रक्रिया, फ्रॅक्चर)\n\nसंपवायचे असल्यास *skip* टाइप करा.`,
+      hindi:   `Hospitalisation का कारण क्या था? (जैसे heart attack, surgery, fracture)\n\nखत्म करने के लिए *skip* लिखें.`,
+    }[lang];
+  }
+
+  // ── health_card_hospitalization_reason ────────────────────────────────────
+  if (pending_action === 'health_card_hospitalization_reason') {
+    if (!isSkip) {
+      const when = account.pending_data?.hospitalization_when || '';
+      const reason = input.slice(0, 200);
+      const detail = `Hospitalisation${when ? ` (${when})` : ''}: ${reason}`;
+      const existing = recipient?.medical_history || '';
+      const updated = existing ? `${existing}; ${detail}` : detail;
+      await updateCareRecipient(account_phone, { medical_history: updated.slice(0, 500) });
+    }
+    await updateAccount(account_phone, { pending_action: null, pending_data: null });
     return {
       english: `✅ Health card saved!\n\nType *health card* anytime to see it. During an SOS, it will be sent automatically to your family.\n\nWhat's next: say *find doctor* to locate a nearby clinic, or *set medication reminders* to set medicine reminders.`,
       marathi: `✅ Health card जतन झाले!\n\nकेव्हाही *health card* टाइप करा पाहण्यासाठी. SOS वेळी ते आपोआप कुटुंबाला पाठवले जाईल.\n\nपुढे काय: जवळचे clinic शोधण्यासाठी *find doctor* म्हणा, किंवा औषध reminders साठी *set medication reminders* म्हणा.`,
