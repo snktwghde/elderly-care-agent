@@ -117,11 +117,7 @@ router.post('/', async (req, res) => {
         await sendTrialStartedMessage(senderPhone);
         const newRecipient = await getPrimaryCareRecipient(senderPhone);
         const offerLang = newRecipient?.preferred_language || 'english';
-        await sendHealthCardOffer(
-          senderPhone, offerLang,
-          updated.account_type === 'self',
-          newRecipient?.recipient_name || ''
-        ).catch(e => console.error('[Health card offer failed]', e.message));
+        await sendHealthCardOffer(senderPhone, offerLang).catch(e => console.error('[Health card offer failed]', e.message));
       }
       return;
     }
@@ -290,7 +286,7 @@ async function handleClinicSelection(account, messageText, lang, recipient) {
   const index = parseInt(messageText.trim()) - 1;
   const clinics = account.pending_data?.clinics || [];
   const clinic = clinics[index];
-  const isSelf = account.account_type === 'self';
+  const isSelf = true;
   const recipientName = recipient?.recipient_name || 'them';
 
   if (!clinic) {
@@ -363,13 +359,13 @@ async function handleMoreClinics(account, lang) {
   });
 
   const recipient = await getPrimaryCareRecipient(account.account_phone);
-  return formatClinicList(clinics, null, lang, !!nextPageToken, account.account_type === 'self', recipient?.recipient_name || '');
+  return formatClinicList(clinics, null, lang, !!nextPageToken, true, recipient?.recipient_name || '');
 }
 
 // ─── Appointment save + medication handoff ────────────────────────────────────
 
 async function confirmAndSaveAppointment({ account, account_phone, recipient, lang, clinic, appointmentTime, dateDisplay, datetimeIso }) {
-  const isSelf = account.account_type === 'self';
+  const isSelf = true;
   const recipientName = recipient?.recipient_name || 'them';
 
   await createAppointment({
@@ -423,7 +419,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
 
     if (choice === '1') {
-      const isSelf = account.account_type === 'self';
+      const isSelf = true;
       const familyContacts = (recipient?.family_contacts || []).filter(p => toE164(p) !== account_phone);
       if (familyContacts.length > 0) {
         const name = recipient.recipient_name;
@@ -443,7 +439,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
     if (choice === '2') {
       await updateAccount(account_phone, { pending_action: null, pending_data: null });
-      return await searchAndFormatClinics(recipient, null, lang, account.account_type === 'self');
+      return await searchAndFormatClinics(recipient, null, lang, true);
     }
 
     return {
@@ -460,7 +456,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
     if (isWalkIn) {
       updateAffirmativePattern(account_phone, choice).catch(() => {});
-      const isSelf = account.account_type === 'self';
+      const isSelf = true;
       const clinic = account.pending_data?.selected_clinic;
       const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
       const familyContacts = (recipient?.family_contacts || []).filter(p => toE164(p) !== account_phone);
@@ -565,10 +561,10 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   if (pending_action === 'appointment_type') {
     if (choice === '1') {
       await updateAccount(account_phone, { pending_action: null });
-      return await searchAndFormatClinics(recipient, null, lang, account.account_type === 'self');
+      return await searchAndFormatClinics(recipient, null, lang, true);
     }
     if (choice === '2') {
-      const isSelfApptType = account.account_type === 'self';
+      const isSelfApptType = true;
       const rNameApptType = recipient?.recipient_name || 'them';
       await updateAccount(account_phone, { pending_action: 'specialist_type' });
       return {
@@ -580,7 +576,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   }
 
   if (pending_action === 'saved_doctor_choice') {
-    const isSelf = account.account_type === 'self';
+    const isSelf = true;
     const recipientName = recipient?.recipient_name || 'them';
     if (choice === '1') {
       await updateAccount(account_phone, { pending_action: null });
@@ -599,7 +595,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
   if (pending_action === 'specialist_type') {
     await updateAccount(account_phone, { pending_action: null });
-    return await searchAndFormatClinics(recipient, messageText.trim(), lang, account.account_type === 'self');
+    return await searchAndFormatClinics(recipient, messageText.trim(), lang, true);
   }
 
   if (pending_action === 'awaiting_post_appointment') {
@@ -615,7 +611,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     }
     if (isPrescription) {
       await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
-      const isSelf = account.account_type === 'self';
+      const isSelf = true;
       const rName = recipient?.recipient_name || 'them';
       return {
         english: `What are the names of the medicines the doctor prescribed? (e.g. Amoxicillin, Metformin)\n\nYou can list multiple — I'll set reminders for each.`,
@@ -717,7 +713,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     }
 
     const selected = med_schedule[idx];
-    const isSelf = account.account_type === 'self';
+    const isSelf = true;
     const rName = recipient?.recipient_name || 'they';
     await updateAccount(account_phone, {
       pending_action: 'awaiting_medication_frequency',
@@ -760,7 +756,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }[lang];
     }
     // Check for medication conflicts against learned active_medications
-    const isSelf = account.account_type === 'self';
+    const isSelf = true;
     const rName = recipient?.recipient_name || 'they';
     const activeMeds = recipient?.user_insights?.active_medications || [];
     const conflictPair = medicines.reduce((found, newMed) => {
@@ -892,7 +888,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const updatedSchedules = [...collected_schedules, { name: currentMedicine, frequency: freq, times }];
     const nextIndex = current_index + 1;
     const isPrescription = account.pending_data?.is_prescription || false;
-    const isSelf23 = account.account_type === 'self';
+    const isSelf23 = true;
 
     await updateAccount(account_phone, {
       pending_action: 'awaiting_medication_duration',
@@ -943,7 +939,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       i === collected_schedules.length - 1 ? { ...s, start_date: today, end_date: endDate } : s
     );
 
-    const isSelf = account.account_type === 'self';
+    const isSelf = true;
     const rName = recipient?.recipient_name || 'they';
 
     // More medicines to collect
@@ -1032,7 +1028,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   if (pending_action === 'awaiting_post_course_response') {
     const isYes = /^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|sure|हां|bilkul)$/i.test(choice);
     if (isYes) {
-      const isSelf = account.account_type === 'self';
+      const isSelf = true;
       await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: false } });
       return {
         english: `What medications do ${isSelf ? 'you' : (recipient?.recipient_name || 'they')} take regularly? Tell me the names.`,
@@ -1051,7 +1047,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   if (pending_action === 'awaiting_post_prescription_prompt') {
     const isYes = /^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|sure|हां|bilkul)$/i.test(choice);
     if (isYes) {
-      const isSelf = account.account_type === 'self';
+      const isSelf = true;
       await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: false } });
       return {
         english: `What other medications do ${isSelf ? 'you' : (recipient?.recipient_name || 'they')} take regularly? Tell me the names.`,
@@ -1069,7 +1065,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
   if (pending_action === 'returning_clinic_choice') {
     const returningClinic = account.pending_data?.returning_clinic;
-    const isSelf = account.account_type === 'self';
+    const isSelf = true;
     const recipientName = recipient?.recipient_name || 'them';
 
     if (choice === '1') {
@@ -1095,7 +1091,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
   if (pending_action === 'medication_conflict') {
     const { conflict_old, conflict_new, medicines, current_index, collected_schedules } = account.pending_data;
-    const isSelf = account.account_type === 'self';
+    const isSelf = true;
     const rNameConflict = recipient?.recipient_name || 'they';
 
     if (choice !== 'replace' && choice !== 'continue') {
@@ -1173,7 +1169,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }[lang];
     }
     if (choice === '3') {
-      return await startHealthCardSetup(account_phone, lang, account.account_type === 'self', recipient?.recipient_name || '');
+      return await startHealthCardSetup(account_phone, lang);
     }
     return {
       english: `Please reply 1, 2, or 3:\n\n1. Find a clinic\n2. Set medication reminder\n3. Set up health card`,
@@ -1207,7 +1203,7 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
   }
 
   if (/^specialised$/i.test(messageText.trim())) {
-    const isSelfSpec = account.account_type === 'self';
+    const isSelfSpec = true;
     const rNameSpec = recipient?.recipient_name || 'them';
     await updateAccount(account.account_phone, { pending_action: 'specialist_type' });
     return {
@@ -1226,7 +1222,7 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
   }
 
   if (parsed.intent === 'medication_reminder') {
-    const isSelf = account.account_type === 'self';
+    const isSelf = true;
     const name = isSelf ? (lang === 'english' ? 'you' : null) : recipient?.recipient_name || 'they';
     const medSchedule = recipient?.medication_schedule || [];
 
@@ -1265,7 +1261,7 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
       (recipient.major_illnesses || []).length > 0 ||
       recipient.medical_history;
     if (!hasHealthCardData) {
-      const isSelf15 = account.account_type === 'self';
+      const isSelf15 = true;
       const rName15 = recipient?.recipient_name || 'them';
       await updateAccount(account.account_phone, { pending_action: 'health_card_offer_pending' });
       return {
@@ -1284,7 +1280,7 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
   }
 
   if (parsed.intent === 'setup_health_card') {
-    return await startHealthCardSetup(account.account_phone, lang, account.account_type === 'self', recipient?.recipient_name || '');
+    return await startHealthCardSetup(account.account_phone, lang);
   }
 
   if (parsed.intent === 'update_health_card') {
@@ -1303,7 +1299,7 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
       if (question) return question;
     }
 
-    const isSelf16 = account.account_type === 'self';
+    const isSelf16 = true;
     const rName16 = recipient?.recipient_name || 'them';
     return {
       english: `Which part of ${isSelf16 ? 'your' : `${rName16}'s`} health card would you like to update?\n\n• Blood group\n• Allergy (add)\n• Illness (add)\n• Surgery (add)\n• Medical history\n\nE.g., type *update blood group* or *add allergy Penicillin*`,
@@ -1363,7 +1359,7 @@ async function handleConfirmAppointment(messageText, account, lang, recipient) {
     appointment_datetime: details.datetime_iso,
   });
 
-  const isSelf = account.account_type === 'self';
+  const isSelf = true;
   const recipientName = recipient?.recipient_name || 'them';
   const toE164Confirm = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
   const familyContacts = (recipient.family_contacts || []).filter(p => toE164Confirm(p) !== account.account_phone);
@@ -1388,7 +1384,7 @@ async function handleConfirmAppointment(messageText, account, lang, recipient) {
 
 async function handleBookAppointment(parsed, account, lang, recipient) {
   const appointmentType = parsed.details?.appointment_type;
-  const isSelf = account.account_type === 'self';
+  const isSelf = true;
   const recipientName = recipient?.recipient_name || 'them';
 
   // No address — can't search
@@ -1534,7 +1530,7 @@ function isSOS(text) {
 }
 
 async function handleSOS(account, lang, recipient) {
-  const isSelf = account.account_type === 'self';
+  const isSelf = true;
   const name = recipient?.recipient_name || 'Your family member';
   const address = recipient?.home_address || 'their home';
   const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;

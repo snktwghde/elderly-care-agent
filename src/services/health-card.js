@@ -26,58 +26,51 @@ export function generateHealthCard(recipient) {
   ].join('\n');
 }
 
-export async function sendHealthCardOffer(phone, lang, isSelf = true, recipientName = '') {
-  const whose = isSelf ? 'your' : `${recipientName}'s`;
-  const subject = isSelf ? 'you' : recipientName;
+export async function sendHealthCardOffer(phone, lang) {
   const msg = {
-    english: `Would you like to set up ${whose} health card?\n\nDoctors often ask for current medications and medical history during visits — this lets ${subject} share it instantly. (Takes about 5 minutes)\n\nReply *Yes* to set up or *Skip* to do it later.`,
-    marathi: isSelf
-      ? `तुमचे health card सेट करायचे आहे का?\n\nडॉक्टरांना visit दरम्यान नेहमी medications आणि medical history विचारावी लागते — health card असल्यास ते लगेच share करता येते. (सुमारे 5 मिनिटे)\n\nसेट करण्यासाठी *Yes* म्हणा किंवा नंतर करायचे असल्यास *Skip* म्हणा.`
-      : `${recipientName} यांचे health card सेट करायचे आहे का?\n\nडॉक्टरांना visit दरम्यान नेहमी medications आणि medical history विचारावी लागते — health card असल्यास ते लगेच share करता येते. (सुमारे 5 मिनिटे)\n\nसेट करण्यासाठी *Yes* म्हणा किंवा नंतर करायचे असल्यास *Skip* म्हणा.`,
-    hindi: isSelf
-      ? `क्या आप अपना health card सेट करना चाहते हैं?\n\nDoctors visit के दौरान हमेशा medications और medical history पूछते हैं — health card होने से वो तुरंत share होती है. (लगभग 5 मिनट)\n\nसेट करने के लिए *Yes* कहें या बाद में करना हो तो *Skip* लिखें.`
-      : `क्या आप ${recipientName} का health card सेट करना चाहते हैं?\n\nDoctors visit के दौरान हमेशा medications और medical history पूछते हैं — health card होने से वो तुरंत share होती है. (लगभग 5 मिनट)\n\nसेट करने के लिए *Yes* कहें या बाद में करना हो तो *Skip* लिखें.`,
-  }[lang] || `Would you like to set up ${whose} health card?\n\nDoctors often ask for current medications and medical history during visits — this lets ${subject} share it instantly. (Takes about 5 minutes)\n\nReply *Yes* to set up or *Skip* to do it later.`;
+    english: `Would you like to set up your health card?\n\nDoctors often ask for current medications and medical history during visits — this lets you share it instantly. (Takes about 5 minutes)\n\nReply *Yes* to set up or *Skip* to do it later.`,
+    marathi: `तुमचे health card सेट करायचे आहे का?\n\nडॉक्टरांना visit दरम्यान नेहमी medications आणि medical history विचारावी लागते — health card असल्यास ते लगेच share करता येते. (सुमारे 5 मिनिटे)\n\nसेट करण्यासाठी *Yes* म्हणा किंवा नंतर करायचे असल्यास *Skip* म्हणा.`,
+    hindi:   `क्या आप अपना health card सेट करना चाहते हैं?\n\nDoctors visit के दौरान हमेशा medications और medical history पूछते हैं — health card होने से वो तुरंत share होती है. (लगभग 5 मिनट)\n\nसेट करने के लिए *Yes* कहें या बाद में करना हो तो *Skip* लिखें.`,
+  }[lang] || `Would you like to set up your health card?\n\nDoctors often ask for current medications and medical history during visits — this lets you share it instantly. (Takes about 5 minutes)\n\nReply *Yes* to set up or *Skip* to do it later.`;
 
   await updateAccount(phone, { pending_action: 'health_card_offer_pending' });
   await sendTextMessage(phone, msg);
 }
 
-export async function startHealthCardSetup(accountPhone, lang, isSelf = true, recipientName = '') {
+export async function startHealthCardSetup(accountPhone, lang) {
   await updateAccount(accountPhone, { pending_action: 'health_card_blood_group' });
-  const whose = isSelf ? 'your' : `${recipientName}'s`;
   return {
-    english: `Let's set up ${whose} health card.\n\nWhat is ${isSelf ? 'your' : `${recipientName}'s`} *blood group*? (e.g., B+, O-, AB+)\n\nType *skip* if unknown or to fill it later.`,
-    marathi: isSelf
-      ? `तुमचे health card सेट करूया.\n\nतुमचा *blood group* काय आहे? (उदा. B+, O-, AB+)\n\nमाहीत नसल्यास किंवा नंतर भरायचे असल्यास *skip* टाइप करा.`
-      : `${recipientName} यांचे health card सेट करूया.\n\n${recipientName} यांचा *blood group* काय आहे? (उदा. B+, O-, AB+)\n\nमाहीत नसल्यास किंवा नंतर भरायचे असल्यास *skip* टाइप करा.`,
-    hindi: isSelf
-      ? `आपका health card सेट करते हैं.\n\nआपका *blood group* क्या है? (जैसे B+, O-, AB+)\n\nनहीं पता या बाद में भरना हो तो *skip* लिखें.`
-      : `${recipientName} का health card सेट करते हैं.\n\n${recipientName} का *blood group* क्या है? (जैसे B+, O-, AB+)\n\nनहीं पता या बाद में भरना हो तो *skip* लिखें.`,
+    english: `Let's set up your health card.\n\nWhat is your *blood group*? (e.g., B+, O-, AB+)\n\nType *skip* if unknown or to fill it later.`,
+    marathi: `तुमचे health card सेट करूया.\n\nतुमचा *blood group* काय आहे? (उदा. B+, O-, AB+)\n\nमाहीत नसल्यास किंवा नंतर भरायचे असल्यास *skip* टाइप करा.`,
+    hindi:   `आपका health card सेट करते हैं.\n\nआपका *blood group* क्या है? (जैसे B+, O-, AB+)\n\nनहीं पता या बाद में भरना हो तो *skip* लिखें.`,
   }[lang];
 }
 
 const VALID_BLOOD_GROUPS = new Set(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'A1+', 'A1-', 'A1B+', 'A1B-']);
 const SKIP_RE = /^(skip|don'?t know|nahi pata|pata nahi|माहीत नाही|पता नहीं|नाही|नको|नहीं)$/i;
 
+const HEALTH_CARD_SAVED = {
+  english: `✅ Health card saved!\n\nType *health card* anytime to see it. During an SOS, it will be sent automatically to your family.\n\nWhat's next: say *find doctor* to locate a nearby clinic, or *set medication reminders* to set medicine reminders.`,
+  marathi: `✅ Health card जतन झाले!\n\nकेव्हाही *health card* टाइप करा पाहण्यासाठी. SOS वेळी ते आपोआप कुटुंबाला पाठवले जाईल.\n\nपुढे काय: जवळचे clinic शोधण्यासाठी *find doctor* म्हणा, किंवा औषध reminders साठी *set medication reminders* म्हणा.`,
+  hindi:   `✅ Health card सेव हो गया!\n\nकभी भी *health card* लिखें देखने के लिए। SOS के समय यह automatically परिवार को भेजा जाएगा.\n\nआगे क्या: नज़दीकी clinic खोजने के लिए *find doctor* कहें, या दवाई reminders के लिए *set medication reminders* लिखें.`,
+};
+
 export async function handleHealthCardSetup(account, messageText, lang, recipient) {
   const { pending_action, account_phone } = account;
   const input = messageText.trim().slice(0, 500);
   const isSkip = SKIP_RE.test(input);
-  const isSelf = account.account_type === 'self';
-  const rName = recipient?.recipient_name || 'them';
 
   // ── health_card_offer_pending ──────────────────────────────────────────────
   if (pending_action === 'health_card_offer_pending') {
     const isYes = /^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|हो\s*जी|हां|ho ja)$/i.test(input);
 
-    if (isYes) return await startHealthCardSetup(account_phone, lang, isSelf, recipient?.recipient_name || '');
+    if (isYes) return await startHealthCardSetup(account_phone, lang);
 
     await updateAccount(account_phone, { pending_action: 'health_card_declined_next_step' });
     return {
       english: `No problem. You can set it up later — just type *health card* anytime.\n\nWhat would you like to do next?\n\n1. Find a clinic\n2. Set medication reminder\n3. Set up health card`,
       marathi: `ठीक आहे. नंतर केव्हाही *health card* टाइप करा.\n\nपुढे काय करायचे आहे?\n\n1. Clinic शोधा\n2. औषध reminder सेट करा\n3. Health card सेट करा`,
-      hindi: `कोई बात नहीं। बाद में कभी भी *health card* लिखें.\n\nआगे क्या करना है?\n\n1. Clinic खोजें\n2. दवाई reminder सेट करें\n3. Health card सेट करें`,
+      hindi:   `कोई बात नहीं। बाद में कभी भी *health card* लिखें.\n\nआगे क्या करना है?\n\n1. Clinic खोजें\n2. दवाई reminder सेट करें\n3. Health card सेट करें`,
     }[lang];
   }
 
@@ -89,20 +82,16 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
         return {
           english: `Please enter a valid blood group (e.g., A+, B-, O+, AB+) or type *skip* to leave it blank.`,
           marathi: `कृपया valid blood group टाका (उदा. A+, B-, O+, AB+) किंवा रिकामे सोडायचे असल्यास *skip* टाइप करा.`,
-          hindi: `कृपया valid blood group डालें (जैसे A+, B-, O+, AB+) या *skip* लिखें अगर खाली छोड़ना है.`,
+          hindi:   `कृपया valid blood group डालें (जैसे A+, B-, O+, AB+) या *skip* लिखें अगर खाली छोड़ना है.`,
         }[lang];
       }
       await updateCareRecipient(account_phone, { blood_group: normalised });
     }
     await updateAccount(account_phone, { pending_action: 'health_card_current_meds' });
     return {
-      english: `Got it!\n\nWhat *current medications* do ${isSelf ? 'you' : rName} take regularly? List the names separated by commas (e.g., Metformin, Amlodipine, Aspirin).\n\nType *skip* if none.`,
-      marathi: isSelf
-        ? `ठीक आहे!\n\nतुम्ही सध्या कोणती *औषधे* नियमित घेता? नावे स्वल्पविरामाने विभागून लिहा (उदा. Metformin, Amlodipine).\n\nनसल्यास *skip* टाइप करा.`
-        : `ठीक आहे!\n\n${rName} सध्या कोणती *औषधे* नियमित घेतात? नावे स्वल्पविरामाने विभागून लिहा (उदा. Metformin, Amlodipine).\n\nनसल्यास *skip* टाइप करा.`,
-      hindi: isSelf
-        ? `ठीक है!\n\nआप अभी कौन सी *दवाइयाँ* नियमित लेते हैं? नाम comma से अलग करके लिखें (जैसे Metformin, Amlodipine).\n\nकोई नहीं तो *skip* लिखें.`
-        : `ठीक है!\n\n${rName} अभी कौन सी *दवाइयाँ* नियमित लेते हैं? नाम comma से अलग करके लिखें (जैसे Metformin, Amlodipine).\n\nकोई नहीं तो *skip* लिखें.`,
+      english: `Got it!\n\nWhat *current medications* do you take regularly? List the names separated by commas (e.g., Metformin, Amlodipine, Aspirin).\n\nType *skip* if none.`,
+      marathi: `ठीक आहे!\n\nतुम्ही सध्या कोणती *औषधे* नियमित घेता? नावे स्वल्पविरामाने विभागून लिहा (उदा. Metformin, Amlodipine).\n\nनसल्यास *skip* टाइप करा.`,
+      hindi:   `ठीक है!\n\nआप अभी कौन सी *दवाइयाँ* नियमित लेते हैं? नाम comma से अलग करके लिखें (जैसे Metformin, Amlodipine).\n\nकोई नहीं तो *skip* लिखें.`,
     }[lang];
   }
 
@@ -116,13 +105,9 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
     }
     await updateAccount(account_phone, { pending_action: 'health_card_allergies' });
     return {
-      english: `Got it!\n\nDo ${isSelf ? 'you' : rName} have any *allergies*? List them separated by commas (e.g., Penicillin, Peanuts, Dust).\n\nType *skip* if none.`,
-      marathi: isSelf
-        ? `ठीक आहे!\n\nतुम्हाला कोणती *allergies* आहेत का? स्वल्पविरामाने विभागून लिहा (उदा. Penicillin, Peanuts).\n\nनसल्यास *skip* टाइप करा.`
-        : `ठीक आहे!\n\n${rName} यांना कोणती *allergies* आहेत का? स्वल्पविरामाने विभागून लिहा (उदा. Penicillin, Peanuts).\n\nनसल्यास *skip* टाइप करा.`,
-      hindi: isSelf
-        ? `ठीक है!\n\nक्या आपको कोई *allergies* हैं? उन्हें comma से अलग करके लिखें (जैसे Penicillin, Peanuts).\n\n*skip* लिखें अगर कोई नहीं.`
-        : `ठीक है!\n\nक्या ${rName} को कोई *allergies* हैं? उन्हें comma से अलग करके लिखें (जैसे Penicillin, Peanuts).\n\n*skip* लिखें अगर कोई नहीं.`,
+      english: `Got it!\n\nDo you have any *allergies*? List them separated by commas (e.g., Penicillin, Peanuts, Dust).\n\nType *skip* if none.`,
+      marathi: `ठीक आहे!\n\nतुम्हाला कोणती *allergies* आहेत का? स्वल्पविरामाने विभागून लिहा (उदा. Penicillin, Peanuts).\n\nनसल्यास *skip* टाइप करा.`,
+      hindi:   `ठीक है!\n\nक्या आपको कोई *allergies* हैं? उन्हें comma से अलग करके लिखें (जैसे Penicillin, Peanuts).\n\n*skip* लिखें अगर कोई नहीं.`,
     }[lang];
   }
 
@@ -135,13 +120,9 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
     }
     await updateAccount(account_phone, { pending_action: 'health_card_illnesses' });
     return {
-      english: `Got it!\n\nDo ${isSelf ? 'you' : rName} have any *major illnesses*? (e.g., Diabetes, High blood pressure, Asthma)\n\nType *skip* if none.`,
-      marathi: isSelf
-        ? `ठीक आहे!\n\nतुम्हाला कोणते *प्रमुख आजार* आहेत का? (उदा. Diabetes, High blood pressure, Asthma)\n\nनसल्यास *skip* टाइप करा.`
-        : `ठीक आहे!\n\n${rName} यांना कोणते *प्रमुख आजार* आहेत का? (उदा. Diabetes, High blood pressure, Asthma)\n\nनसल्यास *skip* टाइप करा.`,
-      hindi: isSelf
-        ? `ठीक है!\n\nक्या आपको कोई *बड़ी बीमारियाँ* हैं? (जैसे Diabetes, High blood pressure, Asthma)\n\n*skip* लिखें अगर कोई नहीं.`
-        : `ठीक है!\n\nक्या ${rName} को कोई *बड़ी बीमारियाँ* हैं? (जैसे Diabetes, High blood pressure, Asthma)\n\n*skip* लिखें अगर कोई नहीं.`,
+      english: `Got it!\n\nDo you have any *major illnesses*? (e.g., Diabetes, High blood pressure, Asthma)\n\nType *skip* if none.`,
+      marathi: `ठीक आहे!\n\nतुम्हाला कोणते *प्रमुख आजार* आहेत का? (उदा. Diabetes, High blood pressure, Asthma)\n\nनसल्यास *skip* टाइप करा.`,
+      hindi:   `ठीक है!\n\nक्या आपको कोई *बड़ी बीमारियाँ* हैं? (जैसे Diabetes, High blood pressure, Asthma)\n\n*skip* लिखें अगर कोई नहीं.`,
     }[lang];
   }
 
@@ -153,13 +134,9 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
     }
     await updateAccount(account_phone, { pending_action: 'health_card_surgeries' });
     return {
-      english: `Got it!\n\nHave ${isSelf ? 'you' : rName} had any *surgeries*? List them with year if known (e.g., Appendix removal 2019, Cataract surgery 2022).\n\nType *skip* if none.`,
-      marathi: isSelf
-        ? `ठीक आहे!\n\nतुम्हाला कोणत्या *शस्त्रक्रिया* झाल्या आहेत का? शक्य असल्यास वर्षासह लिहा (उदा. Appendix removal 2019).\n\nनसल्यास *skip* टाइप करा.`
-        : `ठीक आहे!\n\n${rName} यांना कोणत्या *शस्त्रक्रिया* झाल्या आहेत का? शक्य असल्यास वर्षासह लिहा (उदा. Appendix removal 2019).\n\nनसल्यास *skip* टाइप करा.`,
-      hindi: isSelf
-        ? `ठीक है!\n\nआपकी कोई *surgeries* हुई हैं? हो सके तो साल के साथ लिखें (जैसे Appendix removal 2019).\n\n*skip* लिखें अगर कोई नहीं.`
-        : `ठीक है!\n\n${rName} की कोई *surgeries* हुई हैं? हो सके तो साल के साथ लिखें (जैसे Appendix removal 2019).\n\n*skip* लिखें अगर कोई नहीं.`,
+      english: `Got it!\n\nHave you had any *surgeries*? List them with year if known (e.g., Appendix removal 2019, Cataract surgery 2022).\n\nType *skip* if none.`,
+      marathi: `ठीक आहे!\n\nतुम्हाला कोणत्या *शस्त्रक्रिया* झाल्या आहेत का? शक्य असल्यास वर्षासह लिहा (उदा. Appendix removal 2019).\n\nनसल्यास *skip* टाइप करा.`,
+      hindi:   `ठीक है!\n\nआपकी कोई *surgeries* हुई हैं? हो सके तो साल के साथ लिखें (जैसे Appendix removal 2019).\n\n*skip* लिखें अगर कोई नहीं.`,
     }[lang];
   }
 
@@ -177,13 +154,9 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
     }
     await updateAccount(account_phone, { pending_action: 'health_card_history' });
     return {
-      english: `Almost done!\n\nIs there any other *medical history* to add for ${isSelf ? 'you' : rName}? (e.g., family history of heart disease, past hospitalisations)\n\nType *skip* to finish.`,
-      marathi: isSelf
-        ? `जवळजवळ झाले!\n\nइतर *वैद्यकीय इतिहास* काही सांगायचे आहे का? (उदा. कुटुंबात हृदयरोगाचा इतिहास)\n\nसंपवायचे असल्यास *skip* टाइप करा.`
-        : `जवळजवळ झाले!\n\n${rName} यांचा इतर *वैद्यकीय इतिहास* काही सांगायचे आहे का? (उदा. कुटुंबात हृदयरोगाचा इतिहास)\n\nसंपवायचे असल्यास *skip* टाइप करा.`,
-      hindi: isSelf
-        ? `लगभग हो गया!\n\nकोई और *medical history* बताना है? (जैसे परिवार में दिल की बीमारी, पुराने hospitalisations)\n\nखत्म करने के लिए *skip* लिखें.`
-        : `लगभग हो गया!\n\n${rName} की कोई और *medical history* बताना है? (जैसे परिवार में दिल की बीमारी, पुराने hospitalisations)\n\nखत्म करने के लिए *skip* लिखें.`,
+      english: `Almost done!\n\nIs there any other *medical history* to add? (e.g., family history of heart disease, past hospitalisations)\n\nType *skip* to finish.`,
+      marathi: `जवळजवळ झाले!\n\nइतर *वैद्यकीय इतिहास* काही सांगायचे आहे का? (उदा. कुटुंबात हृदयरोगाचा इतिहास)\n\nसंपवायचे असल्यास *skip* टाइप करा.`,
+      hindi:   `लगभग हो गया!\n\nकोई और *medical history* बताना है? (जैसे परिवार में दिल की बीमारी, पुराने hospitalisations)\n\nखत्म करने के लिए *skip* लिखें.`,
     }[lang];
   }
 
@@ -202,22 +175,14 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
       }
     }
     await updateAccount(account_phone, { pending_action: null });
-    return {
-      english: `✅ Health card saved!\n\nType *health card* anytime to see it. During an SOS, it will be sent automatically to your family.\n\nWhat's next: say *find doctor* to locate a nearby clinic, or *set medication reminders* to set medicine reminders.`,
-      marathi: `✅ Health card जतन झाले!\n\nकेव्हाही *health card* टाइप करा पाहण्यासाठी. SOS वेळी ते आपोआप कुटुंबाला पाठवले जाईल.\n\nपुढे काय: जवळचे clinic शोधण्यासाठी *find doctor* म्हणा, किंवा औषध reminders साठी *set medication reminders* म्हणा.`,
-      hindi: `✅ Health card सेव हो गया!\n\nकभी भी *health card* लिखें देखने के लिए। SOS के समय यह automatically परिवार को भेजा जाएगा.\n\nआगे क्या: नज़दीकी clinic खोजने के लिए *find doctor* कहें, या दवाई reminders के लिए *set medication reminders* लिखें.`,
-    }[lang];
+    return HEALTH_CARD_SAVED[lang];
   }
 
   // ── health_card_hospitalization_when ─────────────────────────────────────
   if (pending_action === 'health_card_hospitalization_when') {
     if (isSkip) {
       await updateAccount(account_phone, { pending_action: null, pending_data: null });
-      return {
-        english: `✅ Health card saved!\n\nType *health card* anytime to see it. During an SOS, it will be sent automatically to your family.\n\nWhat's next: say *find doctor* to locate a nearby clinic, or *set medication reminders* to set medicine reminders.`,
-        marathi: `✅ Health card जतन झाले!\n\nकेव्हाही *health card* टाइप करा पाहण्यासाठी. SOS वेळी ते आपोआप कुटुंबाला पाठवले जाईल.\n\nपुढे काय: जवळचे clinic शोधण्यासाठी *find doctor* म्हणा, किंवा औषध reminders साठी *set medication reminders* म्हणा.`,
-        hindi: `✅ Health card सेव हो गया!\n\nकभी भी *health card* लिखें देखने के लिए। SOS के समय यह automatically परिवार को भेजा जाएगा.\n\nआगे क्या: नज़दीकी clinic खोजने के लिए *find doctor* कहें, या दवाई reminders के लिए *set medication reminders* लिखें.`,
-      }[lang];
+      return HEALTH_CARD_SAVED[lang];
     }
     await updateAccount(account_phone, { pending_action: 'health_card_hospitalization_reason', pending_data: { hospitalization_when: input.slice(0, 100) } });
     return {
@@ -238,11 +203,7 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
       await updateCareRecipient(account_phone, { medical_history: updated.slice(0, 500) });
     }
     await updateAccount(account_phone, { pending_action: null, pending_data: null });
-    return {
-      english: `✅ Health card saved!\n\nType *health card* anytime to see it. During an SOS, it will be sent automatically to your family.\n\nWhat's next: say *find doctor* to locate a nearby clinic, or *set medication reminders* to set medicine reminders.`,
-      marathi: `✅ Health card जतन झाले!\n\nकेव्हाही *health card* टाइप करा पाहण्यासाठी. SOS वेळी ते आपोआप कुटुंबाला पाठवले जाईल.\n\nपुढे काय: जवळचे clinic शोधण्यासाठी *find doctor* म्हणा, किंवा औषध reminders साठी *set medication reminders* म्हणा.`,
-      hindi: `✅ Health card सेव हो गया!\n\nकभी भी *health card* लिखें देखने के लिए। SOS के समय यह automatically परिवार को भेजा जाएगा.\n\nआगे क्या: नज़दीकी clinic खोजने के लिए *find doctor* कहें, या दवाई reminders के लिए *set medication reminders* लिखें.`,
-    }[lang];
+    return HEALTH_CARD_SAVED[lang];
   }
 
   // Unknown setup state — reset
@@ -250,7 +211,7 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
   return {
     english: `Something went wrong. Type *health card* to start over.`,
     marathi: `काहीतरी चुकले. पुन्हा सुरू करण्यासाठी *health card* टाइप करा.`,
-    hindi: `कुछ गलत हुआ। फिर से शुरू करने के लिए *health card* लिखें.`,
+    hindi:   `कुछ गलत हुआ। फिर से शुरू करने के लिए *health card* लिखें.`,
   }[lang];
 }
 
@@ -301,21 +262,14 @@ export async function handleHealthCardUpdate(account, messageText, lang, recipie
   const { pending_action, account_phone } = account;
   const input = messageText.trim().slice(0, 500);
   const isSkip = SKIP_RE.test(input);
-  const isSelf = account.account_type === 'self';
-  const rName = recipient?.recipient_name || 'them';
 
   if (pending_action === 'health_card_update_blood_group') {
     if (isSkip) {
       await updateAccount(account_phone, { pending_action: null });
-      return {
-        english: `Blood group not changed.`,
-        marathi: `Blood group बदललेला नाही.`,
-        hindi:   `Blood group नहीं बदला.`,
-      }[lang];
+      return { english: `Blood group not changed.`, marathi: `Blood group बदललेला नाही.`, hindi: `Blood group नहीं बदला.` }[lang];
     }
     const normalised = input.toUpperCase().replace(/\s+/g, '');
     if (!VALID_BLOOD_GROUPS.has(normalised)) {
-      // Leave pending_action intact so user can retry
       return {
         english: `Please enter a valid blood group (e.g., A+, B-, O+, AB+).`,
         marathi: `कृपया valid blood group टाका (उदा. A+, B-, O+, AB+).`,
@@ -338,11 +292,10 @@ export async function handleHealthCardUpdate(account, messageText, lang, recipie
     const existing = recipient?.allergies || [];
     const merged = [...existing, ...newItems.map(name => ({ type: 'other', name: name.slice(0, 100) }))];
     await updateCareRecipient(account_phone, { allergies: merged });
-    const added = newItems.join(', ');
     return {
-      english: `✅ Added *${added}* to ${isSelf ? 'your' : `${rName}'s`} allergies.`,
-      marathi: `✅ *${added}* ${isSelf ? '' : `${rName} यांच्या `}allergies मध्ये add केले.`,
-      hindi:   `✅ *${added}* ${isSelf ? '' : `${rName} की `}allergies में add हो गया.`,
+      english: `✅ Added *${newItems.join(', ')}* to your allergies.`,
+      marathi: `✅ *${newItems.join(', ')}* allergies मध्ये add केले.`,
+      hindi:   `✅ *${newItems.join(', ')}* allergies में add हो गया.`,
     }[lang];
   }
 
@@ -353,9 +306,9 @@ export async function handleHealthCardUpdate(account, messageText, lang, recipie
     const existing = recipient?.major_illnesses || [];
     await updateCareRecipient(account_phone, { major_illnesses: [...existing, ...newItems] });
     return {
-      english: `✅ Added *${newItems.join(', ')}* to ${isSelf ? 'your' : `${rName}'s`} major illnesses.`,
-      marathi: `✅ *${newItems.join(', ')}* ${isSelf ? '' : `${rName} यांच्या `}प्रमुख आजारांमध्ये add केले.`,
-      hindi:   `✅ *${newItems.join(', ')}* ${isSelf ? '' : `${rName} की `}बड़ी बीमारियों में add हो गया.`,
+      english: `✅ Added *${newItems.join(', ')}* to your major illnesses.`,
+      marathi: `✅ *${newItems.join(', ')}* प्रमुख आजारांमध्ये add केले.`,
+      hindi:   `✅ *${newItems.join(', ')}* बड़ी बीमारियों में add हो गया.`,
     }[lang];
   }
 
@@ -372,9 +325,9 @@ export async function handleHealthCardUpdate(account, messageText, lang, recipie
     const existing = recipient?.surgeries || [];
     await updateCareRecipient(account_phone, { surgeries: [...existing, ...newSurgeries] });
     return {
-      english: `✅ Added *${newItems.join(', ')}* to ${isSelf ? 'your' : `${rName}'s`} surgeries.`,
-      marathi: `✅ *${newItems.join(', ')}* ${isSelf ? '' : `${rName} यांच्या `}शस्त्रक्रियांमध्ये add केले.`,
-      hindi:   `✅ *${newItems.join(', ')}* ${isSelf ? '' : `${rName} की `}surgeries में add हो गया.`,
+      english: `✅ Added *${newItems.join(', ')}* to your surgeries.`,
+      marathi: `✅ *${newItems.join(', ')}* शस्त्रक्रियांमध्ये add केले.`,
+      hindi:   `✅ *${newItems.join(', ')}* surgeries में add हो गया.`,
     }[lang];
   }
 

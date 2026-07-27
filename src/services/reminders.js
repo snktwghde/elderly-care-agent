@@ -64,20 +64,17 @@ async function processReminders() {
     if (!recipient) continue;
 
     const lang = recipient.preferred_language === 'hindi' ? 'hindi' : 'marathi';
-    const userPhone = toWhatsAppPhone(recipient.recipient_phone || appt.account_phone);
+    const userPhone = toWhatsAppPhone(appt.account_phone);
     const clinic = appt.clinic_name || 'Doctor';
-    const name   = recipient.recipient_name;
     const dt     = appt.appointment_datetime;
-    // Self flow: recipient_phone matches account_phone (set during onboarding)
-    const isSelf = toWhatsAppPhone(recipient.recipient_phone) === toWhatsAppPhone(appt.account_phone);
 
     // Single reminder 1 hour before — sent only to the user, not family
     if (!appt.reminder_2h_sent && h >= 0.75 && h <= 1.25) {
       await updateAppointment(appt.id, { reminder_2h_sent: true });
       const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(clinic + ', Pune')}`;
       const msg = lang === 'hindi'
-        ? `⏰ Reminder: ${isSelf ? 'आपकी' : `${name} की`} appointment 1 घंटे में है — ${hindiTime(dt)} ${clinic}।\n\n📍 ${mapsUrl}`
-        : `⏰ Reminder: ${isSelf ? 'तुमची' : `${name} यांची`} appointment 1 तासात आहे — ${marathiTime(dt)} ${clinic}.\n\n📍 ${mapsUrl}`;
+        ? `⏰ Reminder: आपकी appointment 1 घंटे में है — ${hindiTime(dt)} ${clinic}।\n\n📍 ${mapsUrl}`
+        : `⏰ Reminder: तुमची appointment 1 तासात आहे — ${marathiTime(dt)} ${clinic}.\n\n📍 ${mapsUrl}`;
       await sendTextMessage(userPhone, msg).catch(e => console.error(`Reminder failed to ${userPhone.slice(0, 5)}***:`, e.message));
     }
   }
@@ -108,15 +105,13 @@ async function processMedicationReminders() {
     if (!schedules?.length) continue;
 
     const lang = recipient.preferred_language === 'hindi' ? 'hindi' : 'marathi';
-    const phone = toWhatsAppPhone(recipient.recipient_phone || recipient.account_phone);
-    const isSelfMed = toWhatsAppPhone(recipient.recipient_phone) === toWhatsAppPhone(recipient.account_phone);
+    const phone = toWhatsAppPhone(recipient.account_phone);
 
     // ─── Handle expired medicine courses ─────────────────────────────────────
     const expiredMeds = schedules.filter(s => s.end_date && todayStr >= s.end_date);
     if (expiredMeds.length > 0) {
       const kept = schedules.filter(s => !(s.end_date && todayStr >= s.end_date));
       await updateCareRecipient(recipient.account_phone, { medication_schedule: kept });
-      // Send to account_phone (bot controller) — in caregiver flow, recipient_phone is the elderly person who can't interact with the bot
       const accountPhone = toWhatsAppPhone(recipient.account_phone);
       for (const expired of expiredMeds) {
         const msg = lang === 'hindi'
@@ -144,8 +139,8 @@ async function processMedicationReminders() {
         await createMedicationLog(recipient.account_phone, medIndex, slot);
 
         const msg = lang === 'hindi'
-          ? `💊 ${isSelfMed ? 'आपके' : `${recipient.recipient_name} जी,`} *${schedule.name}* लेने का समय हो गया।\n\nलेने के बाद *Done* लिखें।`
-          : `💊 ${isSelfMed ? '' : `${recipient.recipient_name}, `}*${schedule.name}* घेण्याची वेळ झाली.\n\nघेतल्यावर *Done* म्हणा.`;
+          ? `💊 *${schedule.name}* लेने का समय हो गया।\n\nलेने के बाद *Done* लिखें।`
+          : `💊 *${schedule.name}* घेण्याची वेळ झाली.\n\nघेतल्यावर *Done* म्हणा.`;
 
         await sendTextMessage(phone, msg).catch(e => console.error(`Medication reminder failed to ${phone.slice(0, 5)}***:`, e.message));
       }
