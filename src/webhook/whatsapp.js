@@ -1552,10 +1552,15 @@ async function handleSOS(account, lang, recipient) {
     recipient?.medical_history
   );
 
+  const recipientPhone = recipient?.recipient_phone ? toE164(recipient.recipient_phone) : null;
+
   if (familyContacts.length > 0) {
+    const callLine = recipientPhone
+      ? (lang === 'hindi' ? `📞 उन्हें अभी call करें: ${recipientPhone}` : `📞 आत्ता call करा: ${recipientPhone}`)
+      : (lang === 'hindi' ? `📞 उन्हें अभी call करें।` : `📞 आत्ता call करा.`);
     const alertMsg = lang === 'hindi'
-      ? `🆘 *${name}* को मदद चाहिए!\n\n📍 ${address}\n\nतुरंत संपर्क करें। — CareProxy`
-      : `🆘 *${name}* यांना मदत हवी आहे!\n\n📍 ${address}\n\nताबडतोब संपर्क करा. — CareProxy`;
+      ? `🆘 *${name}* को मदद चाहिए!\n\n${callLine}\n\n— CareProxy`
+      : `🆘 *${name}* यांना मदत हवी आहे!\n\n${callLine}\n\n— CareProxy`;
 
     const ambulanceMsg = lang === 'hindi'
       ? `🚑 एम्बुलेंस नंबर:\n\n• सरकारी एम्बुलेंस: tel:108\n• पुलिस + आपातकाल: tel:112`
@@ -1585,9 +1590,9 @@ async function handleSOS(account, lang, recipient) {
     : '';
 
   return {
-    english: `🆘 Emergency!\n\nCall *108* now: tel:108\nOr dial *112*: tel:112\n\n${familyAlerted}${cardNote}`,
-    marathi: `🆘 आपत्कालीन स्थिती!\n\n*108* वर तात्काळ फोन करा: tel:108\nकिंवा *112*: tel:112\n\n${familyAlerted}${cardNote}`,
-    hindi:   `🆘 आपातकाल!\n\n*108* पर तुरंत फोन करें: tel:108\nया *112*: tel:112\n\n${familyAlerted}${cardNote}`,
+    english: `🆘 Emergency helplines:\n\n• Ambulance: tel:108\n• Police & Emergency: tel:112\n\n${familyAlerted}${cardNote}`,
+    marathi: `🆘 आपत्कालीन helplines:\n\n• Ambulance: tel:108\n• पोलीस आणि आपत्काल: tel:112\n\n${familyAlerted}${cardNote}`,
+    hindi:   `🆘 आपातकालीन helplines:\n\n• Ambulance: tel:108\n• पुलिस और आपातकाल: tel:112\n\n${familyAlerted}${cardNote}`,
   }[lang];
 }
 

@@ -60,14 +60,14 @@ const Q = {
 
   complete: {
     english: (name, isSelf) => isSelf
-      ? `All set! CareProxy is ready for you.\n\nYou can now:\n• Locate nearby clinics to book doctor appointment\n• Locate specialised hospitals (type *specialised*)\n• Set medication reminders\n• Get emergency help\n\nJust send a message anytime.`
-      : `All set! CareProxy is ready for ${name}.\n\nYou can now help ${name} with:\n• Locate nearby clinics to book doctor appointment\n• Locate specialised hospitals (type *specialised*)\n• Set medication reminders\n• Get emergency help\n\nJust send a message anytime.`,
+      ? `All set! CareProxy is ready for you.\n\nYou can now:\n• Locate nearby clinics to book doctor appointment\n• Locate specialised hospitals (type *specialised*)\n• Set medication reminders\n• Emergency helplines (type *help* anytime)\n• Sends appointment, medication and emergency alerts to your family\n\nJust send a message anytime.`
+      : `All set! CareProxy is ready for ${name}.\n\nYou can now help ${name} with:\n• Locate nearby clinics to book doctor appointment\n• Locate specialised hospitals (type *specialised*)\n• Set medication reminders\n• Emergency helplines (type *help* anytime)\n• Sends appointment, medication and emergency alerts to family\n\nJust send a message anytime.`,
     marathi: (name, isSelf) => isSelf
-      ? `सर्व तयार! CareProxy तुमच्यासाठी तयार आहे.\n\nआता तुम्ही:\n• Doctor appointment साठी जवळचे clinic शोधा\n• तज्ज्ञ हॉस्पिटल शोधा (*specialised* टाइप करा)\n• औषधांची आठवण सेट करा\n• आपत्कालीन मदत मिळवा\n\nकधीही संदेश करा.`
-      : `सर्व तयार! CareProxy ${name} यांच्यासाठी तयार आहे.\n\nआता तुम्ही ${name} यांना मदत करू शकता:\n• Doctor appointment साठी जवळचे clinic शोधा\n• तज्ज्ञ हॉस्पिटल शोधा (*specialised* टाइप करा)\n• औषधांची आठवण सेट करा\n• आपत्कालीन मदत मिळवा\n\nकधीही संदेश करा.`,
+      ? `सर्व तयार! CareProxy तुमच्यासाठी तयार आहे.\n\nआता तुम्ही:\n• Doctor appointment साठी जवळचे clinic शोधा\n• तज्ज्ञ हॉस्पिटल शोधा (*specialised* टाइप करा)\n• औषधांची आठवण सेट करा\n• आपत्कालीन helplines (*help* टाइप करा)\n• Appointment, औषध आणि emergency alerts कुटुंबाला पाठवले जातात\n\nकधीही संदेश करा.`
+      : `सर्व तयार! CareProxy ${name} यांच्यासाठी तयार आहे.\n\nआता तुम्ही ${name} यांना मदत करू शकता:\n• Doctor appointment साठी जवळचे clinic शोधा\n• तज्ज्ञ हॉस्पिटल शोधा (*specialised* टाइप करा)\n• औषधांची आठवण सेट करा\n• आपत्कालीन helplines (*help* टाइप करा)\n• Appointment, औषध आणि emergency alerts कुटुंबाला पाठवले जातात\n\nकधीही संदेश करा.`,
     hindi:   (name, isSelf) => isSelf
-      ? `सब तैयार! CareProxy आपके लिए तैयार है.\n\nअब आप:\n• Doctor appointment के लिए नज़दीकी clinic खोजें\n• विशेषज्ञ अस्पताल खोजें (*specialised* लिखें)\n• दवाई reminder सेट करें\n• आपातकालीन मदद लें\n\nकभी भी message करें.`
-      : `सब तैयार! CareProxy ${name} के लिए तैयार है.\n\nअब आप ${name} की मदद कर सकते हैं:\n• Doctor appointment के लिए नज़दीकी clinic खोजें\n• विशेषज्ञ अस्पताल खोजें (*specialised* लिखें)\n• दवाई reminder सेट करें\n• आपातकालीन मदद लें\n\nकभी भी message करें.`,
+      ? `सब तैयार! CareProxy आपके लिए तैयार है.\n\nअब आप:\n• Doctor appointment के लिए नज़दीकी clinic खोजें\n• विशेषज्ञ अस्पताल खोजें (*specialised* लिखें)\n• दवाई reminder सेट करें\n• आपातकालीन helplines (*help* लिखें)\n• Appointment, दवाई और emergency alerts परिवार को भेजे जाते हैं\n\nकभी भी message करें.`
+      : `सब तैयार! CareProxy ${name} के लिए तैयार है.\n\nअब आप ${name} की मदद कर सकते हैं:\n• Doctor appointment के लिए नज़दीकी clinic खोजें\n• विशेषज्ञ अस्पताल खोजें (*specialised* लिखें)\n• दवाई reminder सेट करें\n• आपातकालीन helplines (*help* लिखें)\n• Appointment, दवाई और emergency alerts परिवार को भेजे जाते हैं\n\nकभी भी message करें.`,
   },
 };
 
