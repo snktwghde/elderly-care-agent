@@ -1694,9 +1694,9 @@ async function getExpiredReply(account, lang) {
   }
   const linkLine = paymentUrl ? `\n\n${paymentUrl}` : '';
   return {
-    english: `Your 7-day free trial has ended.\n\nSubscribe for ₹499/month to continue using CareProxy:${linkLine}`,
-    marathi: `तुमचा ७ दिवसांचा free trial संपला.\n\nCareProxy वापरणे सुरू ठेवण्यासाठी ₹499/महिना subscribe करा:${linkLine}`,
-    hindi:   `आपका ७ दिन का free trial खत्म हो गया।\n\n₹499/महीना subscribe करके CareProxy जारी रखें:${linkLine}`,
+    english: `Your 7-day free trial has ended.\n\n⚠️ Only emergency help (*help* anytime) remains active.\n\nSubscribe for ₹499/month to restore clinic search, medication reminders, and family alerts:${linkLine}`,
+    marathi: `तुमचा ७ दिवसांचा free trial संपला.\n\n⚠️ फक्त emergency help (*help* टाइप करा) सुरू आहे.\n\nClinic search, औषध reminders आणि family alerts परत सुरू करण्यासाठी ₹499/महिना subscribe करा:${linkLine}`,
+    hindi:   `आपका ७ दिन का free trial खत्म हो गया।\n\n⚠️ केवल emergency help (*help* लिखें) अभी भी active है।\n\n₹499/महीना subscribe करके clinic search, दवाई reminders और family alerts वापस पाएं:${linkLine}`,
   }[lang];
 }
 
