@@ -163,6 +163,13 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
   // ── health_card_history ───────────────────────────────────────────────────
   if (pending_action === 'health_card_history') {
     if (!isSkip) {
+      if (/^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|sure|हां|bilkul|yeah|yep)$/i.test(input)) {
+        return {
+          english: `Please describe your medical history — e.g. family history of heart disease, past hospitalisations, any major past illnesses.`,
+          marathi: `कृपया तुमचा वैद्यकीय इतिहास सांगा — उदा. कुटुंबात हृदयरोग, भूतकाळातील हॉस्पिटलायझेशन, कोणताही मोठा आजार.`,
+          hindi:   `कृपया अपनी medical history बताएं — जैसे परिवार में दिल की बीमारी, पुराने hospitalisations, कोई बड़ी बीमारी.`,
+        }[lang];
+      }
       await updateCareRecipient(account_phone, { medical_history: input.slice(0, 500) });
       const mentionsHospitalisation = /\b(hospital|hospitaliz|admit|admitted|dakhil|दाखल|भर्ती|bhrti|ward|ICU)\b/i.test(input);
       if (mentionsHospitalisation) {

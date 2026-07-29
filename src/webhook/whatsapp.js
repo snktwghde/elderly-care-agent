@@ -648,9 +648,9 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       const medList = med_schedule.map((s, i) => `${i + 1}. *${s.name}*`).join('\n');
       await updateAccount(account_phone, { pending_action: 'awaiting_replace_selection', pending_data: { med_schedule } });
       return {
-        english: `Which medicine would you like to replace?\n\n${medList}\n\nReply with the number.`,
-        marathi: `कोणते औषध बदलायचे आहे?\n\n${medList}\n\nनंबर reply करा.`,
-        hindi:   `कौन सी दवाई बदलनी है?\n\n${medList}\n\nनंबर से reply करें।`,
+        english: `Which medicine would you like to replace?\n\n${medList}\n\nReply with a number (1–${med_schedule.length}).`,
+        marathi: `कोणते औषध बदलायचे आहे?\n\n${medList}\n\n1–${med_schedule.length} मधील नंबर reply करा.`,
+        hindi:   `कौन सी दवाई बदलनी है?\n\n${medList}\n\n1–${med_schedule.length} में से नंबर से reply करें।`,
       }[lang];
     }
 
@@ -661,9 +661,9 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }).join('\n');
       await updateAccount(account_phone, { pending_action: 'awaiting_update_selection', pending_data: { med_schedule } });
       return {
-        english: `Which medicine's schedule would you like to update?\n\n${medList}\n\nReply with the number.`,
-        marathi: `कोणत्या औषधाचे वेळापत्रक बदलायचे आहे?\n\n${medList}\n\nनंबर reply करा.`,
-        hindi:   `किस दवाई का समय बदलना है?\n\n${medList}\n\nनंबर से reply करें।`,
+        english: `Which medicine's schedule would you like to update?\n\n${medList}\n\nReply with a number (1–${med_schedule.length}).`,
+        marathi: `कोणत्या औषधाचे वेळापत्रक बदलायचे आहे?\n\n${medList}\n\n1–${med_schedule.length} मधील नंबर reply करा.`,
+        hindi:   `किस दवाई का समय बदलना है?\n\n${medList}\n\n1–${med_schedule.length} में से नंबर से reply करें।`,
       }[lang];
     }
 
@@ -731,6 +731,13 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   }
 
   if (pending_action === 'awaiting_medication_names') {
+    if (/^(yes|हो|ho|haan|हाँ|ha|हा|sure|हां|bilkul|yeah|yep)$/i.test(messageText.trim())) {
+      return {
+        english: `Please tell me the medicine names, e.g. Amoxicillin, Metformin`,
+        marathi: `कृपया औषधांची नावे सांगा, उदा. Amoxicillin, Metformin`,
+        hindi:   `कृपया दवाइयों के नाम बताएं, जैसे Amoxicillin, Metformin`,
+      }[lang];
+    }
     if (/^(skip|नको|नहीं|no thanks|nope|later|ok|okay|done|fine|alright|theek|thik)$/i.test(messageText.trim())) {
       await updateAccount(account_phone, { pending_action: null, pending_data: null });
       return {
@@ -862,9 +869,11 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const { medicines, current_index, collected_schedules, current_frequency } = account.pending_data;
     const currentMedicine = medicines[current_index];
     const freq = current_frequency || 1;
-    const times = parseTimeInput(messageText, freq);
+    const newTimes = parseTimeInput(messageText, freq);
+    const partialTimes = account.pending_data.partial_times || [];
+    const allTimes = [...new Set([...partialTimes, ...newTimes])].slice(0, freq);
 
-    if (times.length === 0) {
+    if (allTimes.length === 0) {
       return {
         english: `Couldn't understand the time. Please send like: ${freq === 1 ? '8am' : freq === 2 ? '8am and 9pm' : '8am, 1pm and 9pm'}`,
         marathi: `वेळ समजली नाही. उदा: ${freq === 1 ? 'सकाळी 8' : freq === 2 ? 'सकाळी 8 आणि रात्री 9' : 'सकाळी 8, दुपारी 1 आणि रात्री 9'}`,
@@ -872,18 +881,20 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }[lang];
     }
 
-    if (times.length < freq) {
-      const received = times.join(', ');
-      const needed = freq - times.length;
-      const example = freq === 2 ? '8am and 9pm' : '8am, 1pm and 9pm';
-      const exampleMr = freq === 2 ? 'सकाळी 8 आणि रात्री 9' : 'सकाळी 8, दुपारी 1 आणि रात्री 9';
-      const exampleHi = freq === 2 ? '8am और 9pm' : '8am, 1pm और 9pm';
+    if (allTimes.length < freq) {
+      const needed = freq - allTimes.length;
+      await updateAccount(account_phone, {
+        pending_action: 'awaiting_medication_times',
+        pending_data: { ...account.pending_data, partial_times: allTimes },
+      });
       return {
-        english: `You said *${freq} times a day*. I got ${times.length} time${times.length !== 1 ? 's' : ''} (${received}) — still need ${needed} more. Please send all ${freq} times together (e.g. ${example}).`,
-        marathi: `तुम्ही *दिवसातून ${freq} वेळा* म्हणालात. मला ${times.length} वेळ मिळाल्या (${received}) — अजून ${needed} हव्यात. कृपया सर्व ${freq} वेळा एकत्र पाठवा (उदा. ${exampleMr}).`,
-        hindi:   `आपने *दिन में ${freq} बार* कहा। मुझे ${times.length} समय मिले (${received}) — अभी ${needed} और चाहिए। कृपया सभी ${freq} समय एक साथ भेजें (जैसे ${exampleHi}).`,
+        english: `Got ${allTimes.length} time${allTimes.length !== 1 ? 's' : ''} so far (${allTimes.map(displayTime).join(', ')}). Need ${needed} more — send the remaining time${needed !== 1 ? 's' : ''}.`,
+        marathi: `आतापर्यंत ${allTimes.length} वेळ मिळाल्या (${allTimes.map(displayTime).join(', ')}). अजून ${needed} हव्यात — उर्वरित वेळ पाठवा.`,
+        hindi:   `अब तक ${allTimes.length} समय मिले (${allTimes.map(displayTime).join(', ')}). अभी ${needed} और चाहिए — बाकी समय भेजें.`,
       }[lang];
     }
+
+    const times = allTimes;
 
     const updatedSchedules = [...collected_schedules, { name: currentMedicine, frequency: freq, times }];
     const nextIndex = current_index + 1;
@@ -994,7 +1005,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       if (s.end_date === null) durLabel = ' (lifetime)';
       else if (s.end_date && s.start_date) {
         const days = Math.round((new Date(s.end_date) - new Date(s.start_date)) / 86400000);
-        const durText = days % 30 === 0 ? `${days / 30} month${days / 30 > 1 ? 's' : ''}` : days % 7 === 0 ? `${days / 7} week${days / 7 > 1 ? 's' : ''}` : `${days} days`;
+        const durText = days % 30 === 0 ? `${days / 30} month${days / 30 > 1 ? 's' : ''}` : days % 7 === 0 ? `${days / 7} week${days / 7 > 1 ? 's' : ''}` : `${days} day${days !== 1 ? 's' : ''}`;
         durLabel = ` (${durText})`;
       }
       return `💊 *${s.name}* — ${s.times.map(displayTime).join(', ')}${durLabel}`;
@@ -1509,15 +1520,15 @@ function formatClinicList(clinics, specialty, lang, hasMore, isSelf = true, reci
   }).join('\n\n');
 
   const footer = {
-    english: `\n\nSelect a number 1–5 for clinic contact details to book the appointment. Type *more* for more options.\nNeed a specialist? Just say — e.g. "eye doctor" or "heart doctor"`,
-    marathi: `\n\nAppointment साठी 1–5 नंबर निवडा clinic contact details साठी. *more* टाइप करा अजून पर्यायांसाठी.\nतज्ज्ञ डॉक्टर हवे? सांगा — उदा. "डोळ्यांचे डॉक्टर"`,
-    hindi:   `\n\nAppointment के लिए 1–5 नंबर चुनें clinic contact details के लिए। *more* लिखें और options के लिए।\nविशेषज्ञ चाहिए? बताएं — जैसे "आँख का डॉक्टर"`,
+    english: `\n\nSelect a number 1–5 for clinic contact details to book the appointment. Type *more* for more options.\nCalled one directly? Reply with its number (1–5) so I can log it.\nNeed a specialist? Just say — e.g. "eye doctor" or "heart doctor"`,
+    marathi: `\n\nAppointment साठी 1–5 नंबर निवडा clinic contact details साठी. *more* टाइप करा अजून पर्यायांसाठी.\nसरळ call केली? त्याचा नंबर (1–5) reply करा म्हणजे मी नोंद करतो.\nतज्ज्ञ डॉक्टर हवे? सांगा — उदा. "डोळ्यांचे डॉक्टर"`,
+    hindi:   `\n\nAppointment के लिए 1–5 नंबर चुनें clinic contact details के लिए। *more* लिखें और options के लिए।\nसीधे call किया? उसका नंबर (1–5) reply करें ताकि मैं note कर सकूं।\nविशेषज्ञ चाहिए? बताएं — जैसे "आँख का डॉक्टर"`,
   }[lang];
 
   const noMore = {
-    english: `\n\nSelect a number 1–5 for clinic contact details to book the appointment.\nNeed a specialist? Just say — e.g. "eye doctor" or "heart doctor"`,
-    marathi: `\n\nAppointment साठी 1–5 नंबर निवडा clinic contact details साठी.\nतज्ज्ञ डॉक्टर हवे? सांगा — उदा. "डोळ्यांचे डॉक्टर"`,
-    hindi:   `\n\nAppointment के लिए 1–5 नंबर चुनें clinic contact details के लिए।\nविशेषज्ञ चाहिए? बताएं — जैसे "आँख का डॉक्टर"`,
+    english: `\n\nSelect a number 1–5 for clinic contact details to book the appointment.\nCalled one directly? Reply with its number (1–5) so I can log it.\nNeed a specialist? Just say — e.g. "eye doctor" or "heart doctor"`,
+    marathi: `\n\nAppointment साठी 1–5 नंबर निवडा clinic contact details साठी.\nसरळ call केली? त्याचा नंबर (1–5) reply करा म्हणजे मी नोंद करतो.\nतज्ज्ञ डॉक्टर हवे? सांगा — उदा. "डोळ्यांचे डॉक्टर"`,
+    hindi:   `\n\nAppointment के लिए 1–5 नंबर चुनें clinic contact details के लिए।\nसीधे call किया? उसका नंबर (1–5) reply करें ताकि मैं note कर सकूं।\nविशेषज्ञ चाहिए? बताएं — जैसे "आँख का डॉक्टर"`,
   }[lang];
 
   return header + list + (hasMore ? footer : noMore);
@@ -1526,7 +1537,7 @@ function formatClinicList(clinics, specialty, lang, hasMore, isSelf = true, reci
 // ─── SOS ─────────────────────────────────────────────────────────────────────
 
 function isSOS(text) {
-  return /\b(help|emergency|sos|madad|bachao|bachav|मदत|आपत्काल|मदद|बचाओ)\b/i.test(text.trim());
+  return /\b(help|emergenc(y|ies)|sos|madad|bachao|bachav|मदत|आपत्काल|मदद|बचाओ)\b/i.test(text.trim());
 }
 
 async function handleSOS(account, lang, recipient) {

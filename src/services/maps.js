@@ -54,6 +54,21 @@ async function formatPlaces(places) {
   }));
 }
 
+function mapSpecialtyKeyword(specialty) {
+  const s = specialty.toLowerCase().trim();
+  if (/bone|bones|ortho|hadde|हाडे|हड्डी/.test(s)) return 'orthopaedic hospital';
+  if (/teeth|tooth|dental|dant|दात|daant|दाँत/.test(s)) return 'dental clinic';
+  if (/eye|eyes|ophthal|dole|डोळे|aankh|आँख/.test(s)) return 'eye hospital';
+  if (/heart|cardio|hruday|हृदय|dil|दिल/.test(s)) return 'cardiology hospital';
+  if (/skin|derma|twacha|त्वचा/.test(s)) return 'dermatology clinic';
+  if (/ent|ear\b|nose|throat|kan\b|कान|नाक|घसा/.test(s)) return 'ENT clinic';
+  if (/neuro|brain|dimag/.test(s)) return 'neurology hospital';
+  if (/gynae|gynec|women|mahila/.test(s)) return 'gynaecology hospital';
+  if (/kidney|renal/.test(s)) return 'kidney hospital';
+  if (/lung|chest|pulmon/.test(s)) return 'chest hospital';
+  return `${specialty} hospital`;
+}
+
 export async function findNearbyClinics(homeAddress, specialty = null) {
   const cacheKey = `${homeAddress.toLowerCase().trim()}::${specialty || 'general'}`;
 
@@ -69,7 +84,7 @@ export async function findNearbyClinics(homeAddress, specialty = null) {
   }
 
   const { lat, lng } = await geocodeAddress(homeAddress);
-  const keyword = specialty ? `${specialty} hospital` : 'clinic';
+  const keyword = specialty ? mapSpecialtyKeyword(specialty) : 'clinic';
   const { results, nextPageToken } = await searchNearby(lat, lng, keyword);
   const clinics = await formatPlaces(results.slice(0, 5));
 
