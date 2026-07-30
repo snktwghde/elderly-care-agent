@@ -173,7 +173,7 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
       }
       const cleanHistory = await reformatMedicalHistory(input);
       await updateCareRecipient(account_phone, { medical_history: cleanHistory });
-      const mentionsHospitalisation = /\b(hospital|hospitaliz|admit|admitted|dakhil|दाखल|भर्ती|bhrti|ward|ICU)\b/i.test(input);
+      const mentionsHospitalisation = /hospit|admit|दाखल|भर्ती|bhrti|\bward\b|\bICU\b/i.test(input);
       if (mentionsHospitalisation) {
         await updateAccount(account_phone, { pending_action: 'health_card_hospitalization_when', pending_data: null });
         return {

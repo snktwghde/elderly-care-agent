@@ -707,31 +707,50 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
   if (pending_action === 'awaiting_update_selection') {
     const { med_schedule = [] } = account.pending_data || {};
-    const idx = parseInt(messageText.trim()) - 1;
+    const indices = [...messageText.matchAll(/\d+/g)]
+      .map(m => parseInt(m[0]) - 1)
+      .filter(i => i >= 0 && i < med_schedule.length);
+    const uniqueIndices = [...new Set(indices)];
 
-    if (isNaN(idx) || idx < 0 || idx >= med_schedule.length) {
+    if (uniqueIndices.length === 0) {
       return {
-        english: `Please reply with a number between 1 and ${med_schedule.length}.`,
-        marathi: `कृपया 1 ते ${med_schedule.length} मधील नंबर reply करा.`,
-        hindi:   `कृपया 1 से ${med_schedule.length} के बीच नंबर से reply करें।`,
+        english: `Please reply with a number (1–${med_schedule.length}).`,
+        marathi: `कृपया 1–${med_schedule.length} मधील नंबर reply करा.`,
+        hindi:   `कृपया 1–${med_schedule.length} में से नंबर से reply करें।`,
       }[lang];
     }
 
-    const selected = med_schedule[idx];
-    const isSelf = true;
-    const rName = recipient?.recipient_name || 'they';
+    const selectedMeds = uniqueIndices.map(i => med_schedule[i].name);
     await updateAccount(account_phone, {
       pending_action: 'awaiting_medication_frequency',
-      pending_data: { medicines: [selected.name], current_index: 0, collected_schedules: [], is_prescription: false },
+      pending_data: { medicines: selectedMeds, current_index: 0, collected_schedules: [], is_prescription: false },
     });
     return {
-      english: `Updating *${selected.name}*. How many times a day do ${isSelf ? 'you' : rName} take it now?`,
-      marathi: isSelf
-        ? `*${selected.name}* update करत आहे. आता दिवसातून किती वेळा घेता?`
-        : `*${selected.name}* update करत आहे. ${rName} आता दिवसातून किती वेळा घेतात?`,
-      hindi: isSelf
-        ? `*${selected.name}* update हो रहा है। अब दिन में कितनी बार लेते हैं?`
-        : `*${selected.name}* update हो रहा है। ${rName} अब दिन में कितनी बार लेते हैं?`,
+      english: `Updating *${selectedMeds[0]}*. How many times a day do you take it now?`,
+      marathi: `*${selectedMeds[0]}* update करत आहे. आता दिवसातून किती वेळा घेता?`,
+      hindi:   `*${selectedMeds[0]}* update हो रहा है। अब दिन में कितनी बार लेते हैं?`,
+    }[lang];
+  }
+
+  if (pending_action === 'awaiting_unscheduled_setup_response') {
+    const { unscheduled_names = [] } = account.pending_data || {};
+    const isYes = /^(yes|हो|ho|haan|हाँ|ha|हा|sure|हां|bilkul|yeah|yep)$/i.test(messageText.trim());
+    if (isYes && unscheduled_names.length > 0) {
+      await updateAccount(account_phone, {
+        pending_action: 'awaiting_medication_frequency',
+        pending_data: { medicines: unscheduled_names, current_index: 0, collected_schedules: [], is_prescription: false },
+      });
+      return {
+        english: `How many times a day do you take *${unscheduled_names[0]}*?`,
+        marathi: `तुम्ही *${unscheduled_names[0]}* दिवसातून किती वेळा घेता?`,
+        hindi:   `आप *${unscheduled_names[0]}* दिन में कितनी बार लेते हैं?`,
+      }[lang];
+    }
+    await updateAccount(account_phone, { pending_action: null, pending_data: null });
+    return {
+      english: `No problem! Type *my medicines* anytime to view your schedule.`,
+      marathi: `ठीक आहे! *my medicines* टाइप करा कधीही schedule पाहण्यासाठी.`,
+      hindi:   `कोई बात नहीं! *my medicines* लिखें कभी भी schedule देखने के लिए।`,
     }[lang];
   }
 
@@ -1272,6 +1291,7 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
         hindi:   `कोई दवाई reminder सेट नहीं है।\n\n*medication reminders* लिखें दवाइयाँ जोड़ने के लिए।`,
       }[lang];
     }
+    const unscheduled = medSchedule.filter(s => !s.frequency || !(s.times || []).length);
     const medList = medSchedule.map((s, i) => {
       if (!s.frequency || !(s.times || []).length) {
         return `${i + 1}. 💊 *${s.name}* — _(reminder not set)_`;
@@ -1286,6 +1306,20 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
       }
       return `${i + 1}. 💊 *${s.name}* — ${times} (${s.frequency}x daily${durLabel})`;
     }).join('\n');
+
+    if (unscheduled.length > 0) {
+      const names = unscheduled.map(s => `*${s.name}*`).join(' and ');
+      await updateAccount(account.account_phone, {
+        pending_action: 'awaiting_unscheduled_setup_response',
+        pending_data: { unscheduled_names: unscheduled.map(s => s.name) },
+      });
+      return {
+        english: `Your current medicines:\n\n${medList}\n\n${names} don't have a reminder schedule yet. Reply *yes* to set them up now, or *skip*.`,
+        marathi: `सध्याची औषधे:\n\n${medList}\n\n${names} साठी reminder अजून सेट केलेले नाही. आत्ता सेट करायचे असल्यास *yes* म्हणा, किंवा *skip*.`,
+        hindi:   `आपकी मौजूदा दवाइयाँ:\n\n${medList}\n\n${names} का reminder अभी set नहीं है। अभी set करना हो तो *yes* कहें, या *skip*.`,
+      }[lang];
+    }
+
     return {
       english: `Your current medicines:\n\n${medList}\n\nType *medication reminders* to add or update medicines.`,
       marathi: `सध्याची औषधे:\n\n${medList}\n\nऔषधे जोडण्यासाठी किंवा बदलण्यासाठी *medication reminders* टाइप करा.`,
