@@ -122,7 +122,8 @@ export async function parseAppointmentDetails(messageText) {
 Return ONLY valid JSON:
 {"clinic_name":"<clinic or doctor name, or null>","date_display":"<e.g. Thursday, 26 June 2026>","time_display":"<e.g. 10:00 AM>","datetime_iso":"<UTC ISO e.g. 2026-06-26T04:30:00.000Z — IST is UTC+5:30>"}
 
-If date or time cannot be determined, use null for those fields.
+IMPORTANT: Only populate date_display if the user EXPLICITLY stated a date or used a word like "today", "tomorrow", "Monday", "July 15". If the user only gave a time (e.g. "7pm") with no date reference, return null for date_display and datetime_iso.
+If time or date cannot be determined, use null for those fields.
 <user_message>${String(messageText).slice(0, 500)}</user_message>`,
     }],
   });

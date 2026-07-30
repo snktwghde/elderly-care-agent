@@ -461,9 +461,11 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
       const familyContacts = (recipient?.family_contacts || []).filter(p => toE164(p) !== account_phone);
       if (familyContacts.length > 0) {
-        const familyMsg = lang === 'hindi'
-          ? `🏥 ${recipient.recipient_name} ने आज *${clinic?.name || 'doctor'}* में doctor से मिले। — CareProxy`
-          : `🏥 ${recipient.recipient_name} आज *${clinic?.name || 'doctor'}* मध्ये doctor ला भेटले. — CareProxy`;
+        const familyMsg = {
+          english: `🏥 ${recipient.recipient_name} visited the doctor at *${clinic?.name || 'a clinic'}* today. — CareProxy`,
+          marathi: `🏥 ${recipient.recipient_name} आज *${clinic?.name || 'doctor'}* मध्ये doctor ला भेटले. — CareProxy`,
+          hindi:   `🏥 ${recipient.recipient_name} ने आज *${clinic?.name || 'doctor'}* में doctor से मिले। — CareProxy`,
+        }[lang] || `🏥 ${recipient.recipient_name} visited the doctor at *${clinic?.name || 'a clinic'}* today. — CareProxy`;
         await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(() => {})));
       }
       await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
@@ -1203,9 +1205,9 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   // Unknown pending state — reset and re-prompt
   await updateAccount(account_phone, { pending_action: null });
   return {
-    english: 'I can help you with doctor appointments, medication reminders, or emergency help. What do you need?',
-    marathi: 'मी डॉक्टर अपॉइंटमेंट, औषधांची आठवण किंवा आपत्कालीन मदतीसाठी मदत करू शकतो. काय हवे आहे?',
-    hindi:   'मैं डॉक्टर अपॉइंटमेंट, दवाई रिमाइंडर या आपातकाल में मदद कर सकता हूं। क्या चाहिए?',
+    english: 'What would you like to do?\n• *find doctor* — nearby clinic\n• *medication reminders* — set medicine reminders\n• *my medicines* — view current medicines\n• *health card* — your medical info\n• *help* — emergency',
+    marathi: 'काय करायचे आहे?\n• *find doctor* — जवळचे clinic\n• *medication reminders* — औषध reminders\n• *my medicines* — सध्याची औषधे\n• *health card* — वैद्यकीय माहिती\n• *help* — आपत्काल',
+    hindi:   'क्या करना है?\n• *find doctor* — नज़दीकी clinic\n• *medication reminders* — दवाई reminders\n• *my medicines* — मौजूदा दवाइयाँ\n• *health card* — medical जानकारी\n• *help* — emergency',
   }[lang];
 }
 
@@ -1367,9 +1369,9 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
       hindi:   'आपातकाल समझ गए! परिवार को सूचित कर रहे हैं।',
     },
     default: {
-      english: 'I can help you with doctor appointments, medication reminders, or emergency help. What do you need?',
-      marathi: 'मी डॉक्टर अपॉइंटमेंट, औषधांची आठवण किंवा आपत्कालीन मदतीसाठी मदत करू शकतो. काय हवे आहे?',
-      hindi:   'मैं डॉक्टर अपॉइंटमेंट, दवाई रिमाइंडर या आपातकाल में मदद कर सकता हूं। क्या चाहिए?',
+      english: 'What would you like to do?\n• *find doctor* — nearby clinic\n• *medication reminders* — set medicine reminders\n• *my medicines* — view current medicines\n• *health card* — your medical info\n• *help* — emergency',
+      marathi: 'काय करायचे आहे?\n• *find doctor* — जवळचे clinic\n• *medication reminders* — औषध reminders\n• *my medicines* — सध्याची औषधे\n• *health card* — वैद्यकीय माहिती\n• *help* — आपत्काल',
+      hindi:   'क्या करना है?\n• *find doctor* — नज़दीकी clinic\n• *medication reminders* — दवाई reminders\n• *my medicines* — मौजूदा दवाइयाँ\n• *health card* — medical जानकारी\n• *help* — emergency',
     },
   };
 
