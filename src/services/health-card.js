@@ -1,5 +1,6 @@
 import { updateAccount, updateCareRecipient } from './supabase.js';
 import { sendTextMessage } from './whatsapp.js';
+import { reformatMedicalHistory } from './claude.js';
 
 export function generateHealthCard(recipient) {
   const name = recipient?.recipient_name || 'Patient';
@@ -170,7 +171,8 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
           hindi:   `कृपया अपनी medical history बताएं — जैसे परिवार में दिल की बीमारी, पुराने hospitalisations, कोई बड़ी बीमारी.`,
         }[lang];
       }
-      await updateCareRecipient(account_phone, { medical_history: input.slice(0, 500) });
+      const cleanHistory = await reformatMedicalHistory(input);
+      await updateCareRecipient(account_phone, { medical_history: cleanHistory });
       const mentionsHospitalisation = /\b(hospital|hospitaliz|admit|admitted|dakhil|दाखल|भर्ती|bhrti|ward|ICU)\b/i.test(input);
       if (mentionsHospitalisation) {
         await updateAccount(account_phone, { pending_action: 'health_card_hospitalization_when', pending_data: null });
@@ -341,7 +343,8 @@ export async function handleHealthCardUpdate(account, messageText, lang, recipie
   if (pending_action === 'health_card_update_history') {
     await updateAccount(account_phone, { pending_action: null });
     if (isSkip) return { english: 'No changes made.', marathi: 'बदल नाही.', hindi: 'कोई बदलाव नहीं.' }[lang];
-    await updateCareRecipient(account_phone, { medical_history: input.slice(0, 500) });
+    const cleanUpdatedHistory = await reformatMedicalHistory(input);
+    await updateCareRecipient(account_phone, { medical_history: cleanUpdatedHistory });
     return {
       english: `✅ Medical history updated.`,
       marathi: `✅ वैद्यकीय इतिहास update झाला.`,

@@ -8,7 +8,7 @@ const SYSTEM_PROMPT = `You are a WhatsApp message parser for CareProxy, an elder
 
 Parse the incoming WhatsApp message and return ONLY valid JSON with this shape:
 {
-  "intent": "<one of: book_appointment | confirm_appointment | medication_reminder | sos | setup_health_card | show_health_card | update_health_card | unknown>",
+  "intent": "<one of: book_appointment | confirm_appointment | medication_reminder | view_medicines | sos | setup_health_card | show_health_card | update_health_card | unknown>",
   "language": "<one of: hindi | marathi | english | mixed>",
   "confidence": "<one of: high | medium | low>",
   "details": {
@@ -41,6 +41,11 @@ Confirm appointment (user reporting they booked it themselves):
 - "appointment book zali", "appointment fixed", "appointment confirm zali", "appointment ho gaya"
 - "I booked", "booked the appointment", "doctor ne time dila", "appointment milali"
 - Hindi: "appointment book ho gayi", "doctor ne appointment diya"
+
+View medicines (user wants to see their current medicine list and schedule):
+- English: "my medicines", "show medicines", "view medicines", "what medicines", "current medicines", "medicine list", "show my medicines"
+- Marathi: "mazi aushadhe", "aushadhe dakhav", "kiti aushadhe gheto", "औषधे दाखव"
+- Hindi: "meri dawai", "dawai dikhao", "kaun si dawai", "meri davaiyaan", "कौन सी दवाई"
 
 Status: "status", "confirm", "appointment hua", "appointment zali ka", "appointment confirmed"
 
@@ -175,5 +180,21 @@ export async function parseIntentSafe(messageText, conversationHistory = [], use
   } catch (e) {
     console.error('[Claude API error]', e.message);
     return { intent: 'unknown', language: 'unknown', confidence: 'low', details: {} };
+  }
+}
+
+export async function reformatMedicalHistory(rawInput) {
+  try {
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      messages: [{
+        role: 'user',
+        content: `Rewrite the following as a clean one or two sentence third-person medical summary. Keep it factual and concise. No preamble, no quotes, no explanation — just the summary.\n\n${String(rawInput).slice(0, 500)}`,
+      }],
+    });
+    return message.content[0].text.trim().slice(0, 500);
+  } catch {
+    return String(rawInput).slice(0, 500);
   }
 }
