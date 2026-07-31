@@ -1,6 +1,5 @@
 import { updateAccount, updateCareRecipient } from './supabase.js';
 import { sendTextMessage } from './whatsapp.js';
-import { reformatMedicalHistory } from './claude.js';
 
 export function generateHealthCard(recipient) {
   const name = recipient?.recipient_name || 'Patient';
@@ -171,10 +170,20 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
           hindi:   `कृपया अपनी medical history बताएं — जैसे परिवार में दिल की बीमारी, पुराने hospitalisations, कोई बड़ी बीमारी.`,
         }[lang];
       }
-      const cleanHistory = await reformatMedicalHistory(input);
-      await updateCareRecipient(account_phone, { medical_history: cleanHistory });
       const mentionsHospitalisation = /hospit|admit|दाखल|भर्ती|bhrti|\bward\b|\bICU\b/i.test(input);
       if (mentionsHospitalisation) {
+        // Strip hospitalisation-related words to find other medical content in the same message
+        const withoutHospi = input
+          .replace(/\b(past\s+)?hospit\w*/gi, '')
+          .replace(/\b(was\s+|been\s+|got\s+)?admit\w*/gi, '')
+          .replace(/\bदाखल\b|\bभर्ती\b|\bbhrti\b|\bward\b|\bICU\b/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const hasOtherContent = withoutHospi.replace(/[^a-zA-Zऀ-ॿ]/g, '').length > 8;
+        if (hasOtherContent) {
+          // Save the non-hospitalisation content; the follow-up will append the structured entry
+          await updateCareRecipient(account_phone, { medical_history: input.slice(0, 500) });
+        }
         await updateAccount(account_phone, { pending_action: 'health_card_hospitalization_when', pending_data: null });
         return {
           english: `When did this hospitalisation happen? (e.g. 2019, or "last year")\n\nType *skip* to finish.`,
@@ -182,6 +191,8 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
           hindi:   `यह hospitalisation कब हुई? (जैसे 2019, या "पिछले साल")\n\nखत्म करने के लिए *skip* लिखें.`,
         }[lang];
       }
+      // No hospitalisation mention — save verbatim
+      await updateCareRecipient(account_phone, { medical_history: input.slice(0, 500) });
     }
     await updateAccount(account_phone, { pending_action: null });
     return HEALTH_CARD_SAVED[lang];
@@ -343,8 +354,7 @@ export async function handleHealthCardUpdate(account, messageText, lang, recipie
   if (pending_action === 'health_card_update_history') {
     await updateAccount(account_phone, { pending_action: null });
     if (isSkip) return { english: 'No changes made.', marathi: 'बदल नाही.', hindi: 'कोई बदलाव नहीं.' }[lang];
-    const cleanUpdatedHistory = await reformatMedicalHistory(input);
-    await updateCareRecipient(account_phone, { medical_history: cleanUpdatedHistory });
+    await updateCareRecipient(account_phone, { medical_history: input.slice(0, 500) });
     return {
       english: `✅ Medical history updated.`,
       marathi: `✅ वैद्यकीय इतिहास update झाला.`,
