@@ -57,7 +57,7 @@ async function formatPlaces(places) {
 function mapSpecialtyKeyword(specialty) {
   const s = specialty.toLowerCase().trim();
   if (/bone|bones|ortho|hadde|हाडे|हड्डी/.test(s)) return 'orthopaedic hospital';
-  if (/teeth|tooth|dental|dant|दात|daant|दाँत/.test(s)) return 'dental clinic';
+  if (/teeth|tooth|dental|dentist|dant|दात|daant|दाँत/.test(s)) return 'dental clinic';
   if (/eye|eyes|ophthal|dole|डोळे|aankh|आँख/.test(s)) return 'eye hospital';
   if (/heart|cardio|hruday|हृदय|dil|दिल/.test(s)) return 'cardiology hospital';
   if (/skin|derma|twacha|त्वचा/.test(s)) return 'dermatology clinic';

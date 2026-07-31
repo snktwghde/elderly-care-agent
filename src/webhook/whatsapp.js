@@ -511,7 +511,12 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
   if (pending_action === 'awaiting_appointment_time_input') {
     const clinic = account.pending_data?.selected_clinic || {};
-    const details = await parseAppointmentDetails(`appointment at ${clinic.name || 'doctor'} at ${messageText.trim()}`);
+    // When clinic name is unknown, pass raw message so parseAppointmentDetails can extract both clinic and time
+    const inputForParsing = clinic.name
+      ? `appointment at ${clinic.name} at ${messageText.trim()}`
+      : messageText.trim();
+    const details = await parseAppointmentDetails(inputForParsing);
+    if (details.clinic_name && !clinic.name) clinic.name = details.clinic_name;
     const appointmentTime = details.time_display;
 
     if (!appointmentTime) {
@@ -735,7 +740,8 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
   if (pending_action === 'awaiting_unscheduled_setup_response') {
     const { unscheduled_names = [] } = account.pending_data || {};
-    const isYes = /^(yes|हो|ho|haan|हाँ|ha|हा|sure|हां|bilkul|yeah|yep)$/i.test(messageText.trim());
+    const isYes = /^(yes|हो|ho|haan|हाँ|ha|हा|sure|हां|bilkul|yeah|yep)$/i.test(messageText.trim())
+      || /\bprescri(bed?|ption)\b/i.test(messageText.trim());
     if (isYes && unscheduled_names.length > 0) {
       await updateAccount(account_phone, {
         pending_action: 'awaiting_medication_frequency',
@@ -1234,6 +1240,29 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 // ─── Intent reply builder ─────────────────────────────────────────────────────
 
 async function buildReply(parsed, account, lang, recipient, messageText) {
+  // Farewell / dismissal — respond warmly, no capability list
+  if (/\b(nothing|no\s+thanks?|not\s+now|that'?s?\s+(all|it)|all\s+good|no\s+need|nahi\s+chahiye|नाही\s+लागत|kuch\s+nahi|नहीं\s+चाहिए)\b/i.test(messageText)
+      || /^(thank\s*(you|u)?s?|thanks?|shukriya|dhanyawad|शुक्रिया|धन्यवाद|aabhar|आभार|bye|goodbye)\b/i.test(messageText.trim())) {
+    return {
+      english: `Of course! Have a good day. 😊 Message anytime you need help.`,
+      marathi: `ठीक आहे! चांगला दिवस जावो. 😊 कधीही मदत लागली तर message करा.`,
+      hindi:   `बिल्कुल! अच्छा दिन हो। 😊 जब भी ज़रूरत हो, message करें।`,
+    }[lang];
+  }
+
+  // "Prescribed medicine/medication" — user has a new prescription, start reminder setup
+  if (/\bprescribed?\s+(medicine|medication|med|tablet)s?\b|\b(medicine|medication|med|tablet)s?\s+prescribed\b/i.test(messageText)) {
+    await updateAccount(account.account_phone, {
+      pending_action: 'awaiting_medication_names',
+      pending_data: { is_prescription: true },
+    });
+    return {
+      english: `What medicines did the doctor prescribe? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
+      marathi: `Doctor ने कोणती औषधे दिली? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
+      hindi:   `Doctor ने कौन सी दवाइयाँ दी हैं? नाम बताएं, मैं reminders सेट कर दूंगा।\n\nनहीं दी तो *skip* लिखें।`,
+    }[lang];
+  }
+
   if (/^(find\s*(doctor|clinic|nearest)|nearest\s*(doctor|clinic)|doctor\s*near|clinic\s*near)/i.test(messageText.trim())) {
     return await handleBookAppointment({ intent: 'book_appointment', details: {} }, account, lang, recipient);
   }
@@ -1418,14 +1447,26 @@ async function handleConfirmAppointment(messageText, account, lang, recipient) {
 
   // No time provided — ask before saving or notifying anyone
   if (!details.time_display) {
+    if (!details.clinic_name) {
+      // Neither clinic nor time known — ask for both together
+      await updateAccount(account.account_phone, {
+        pending_action: 'awaiting_appointment_time_input',
+        pending_data: { selected_clinic: { name: null } },
+      });
+      return {
+        english: `Got it! Which doctor or clinic did you book with, and at what time? (e.g. *Dr. Shah, 11am*)`,
+        marathi: `ठीक आहे! कोणत्या doctor किंवा clinic मध्ये book केले, आणि किती वाजता? (उदा. *Dr. Shah, सकाळी 11*)`,
+        hindi:   `ठीक है! किस doctor या clinic में book किया, और कितने बजे? (जैसे *Dr. Shah, 11 बजे*)`,
+      }[lang];
+    }
     await updateAccount(account.account_phone, {
       pending_action: 'awaiting_appointment_time_input',
-      pending_data: { selected_clinic: { name: details.clinic_name || 'Doctor' } },
+      pending_data: { selected_clinic: { name: details.clinic_name } },
     });
     return {
-      english: `Got it! What time is the appointment at *${details.clinic_name || 'the doctor'}*?`,
-      marathi: `ठीक आहे! *${details.clinic_name || 'Doctor'}* येथे appointment किती वाजता आहे?`,
-      hindi:   `ठीक है! *${details.clinic_name || 'Doctor'}* में appointment कितने बजे है?`,
+      english: `Got it! What time is the appointment at *${details.clinic_name}*?`,
+      marathi: `ठीक आहे! *${details.clinic_name}* येथे appointment किती वाजता आहे?`,
+      hindi:   `ठीक है! *${details.clinic_name}* में appointment कितने बजे है?`,
     }[lang];
   }
 
@@ -1678,7 +1719,7 @@ async function handleSOS(account, lang, recipient) {
 function isMedicationAck(text) {
   const t = text.trim();
   if (/^👍[\u{1F3FB}-\u{1F3FF}]?$/u.test(t)) return true;
-  return /^(done|taken|yes|हो|ha|घेतलं|ghetal|le liya|ले लिया|ok|okay|हाँ|haan|लिया|घेतले)$/i.test(t);
+  return /^(done|taken|yes|हो|ha|घेतलं|ghetal|le liya|ले लिया|हाँ|haan|लिया|घेतले)$/i.test(t);
 }
 
 async function handleMedicationAck(account, lang) {
