@@ -172,9 +172,9 @@ router.post('/', async (req, res) => {
           // "okay/done" with no pending medication — treat as acknowledgment, don't invoke Claude
           if (/^(ok|okay|done|theek|accha|achha|alright|noted|ठीक|ठीक आहे)$/i.test(messageText.trim())) {
             reply = {
-              english: 'Let me know if you need help with appointments, medication reminders, or emergencies.',
-              marathi: 'काही लागलं तर सांगा — appointment, औषध reminder किंवा आपत्काल.',
-              hindi:   'कुछ चाहिए तो बताएं — appointment, दवाई reminder या आपातकाल।',
+              english: 'Here\'s what I can help with:\n• *find doctor* — nearby clinic\n• *medication reminders* — set medicine reminders\n• *my medicines* — view current medicines\n• *health card* — your medical info\n• *help* — emergency',
+              marathi: 'मी कशात मदत करू शकतो:\n• *find doctor* — जवळचे clinic\n• *medication reminders* — औषध reminders\n• *my medicines* — सध्याची औषधे\n• *health card* — वैद्यकीय माहिती\n• *help* — आपत्काल',
+              hindi:   'मैं इनमें मदद कर सकता हूँ:\n• *find doctor* — नज़दीकी clinic\n• *medication reminders* — दवाई reminders\n• *my medicines* — मौजूदा दवाइयाँ\n• *health card* — medical जानकारी\n• *help* — emergency',
             }[lang];
           } else {
             const history = await getConversationHistory(senderPhone, 3);
@@ -452,7 +452,8 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   if (pending_action === 'awaiting_booking_confirmation') {
     const isYes    = /^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|confirmed|done|zali|झाली|book zali)$/i.test(choice);
     const isNo     = /^(no|nahi|नाही|नहीं|cancel)$/i.test(choice);
-    const isWalkIn = /^(walk.?in|walkin|walk in|came|visited|आज|आलो|आले|भेटलो|भेटले|मिले|आया)$/i.test(choice);
+    const isWalkIn = /^(walk.?in|walkin|walk in|came|visited|आज|आलो|आले|भेटलो|भेटले|मिले|आया)$/i.test(choice)
+      || /\bprescri(bed?|ption)\b/i.test(choice);
 
     if (isWalkIn) {
       updateAffirmativePattern(account_phone, choice).catch(() => {});
@@ -480,9 +481,9 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       updateNegativePattern(account_phone, choice).catch(() => {});
       await updateAccount(account_phone, { pending_action: null, pending_data: null });
       return {
-        english: 'No problem. Let me know if you need anything else.',
-        marathi: 'ठीक आहे. काही लागलं तर सांगा.',
-        hindi:   'कोई बात नहीं। कुछ चाहिए तो बताएं।',
+        english: 'No problem. Here\'s what I can help with:\n• *find doctor* — nearby clinic\n• *medication reminders* — set medicine reminders\n• *my medicines* — view current medicines\n• *health card* — your medical info\n• *help* — emergency',
+        marathi: 'ठीक आहे. मी कशात मदत करू शकतो:\n• *find doctor* — जवळचे clinic\n• *medication reminders* — औषध reminders\n• *my medicines* — सध्याची औषधे\n• *health card* — वैद्यकीय माहिती\n• *help* — आपत्काल',
+        hindi:   'कोई बात नहीं। मैं इनमें मदद कर सकता हूँ:\n• *find doctor* — नज़दीकी clinic\n• *medication reminders* — दवाई reminders\n• *my medicines* — मौजूदा दवाइयाँ\n• *health card* — medical जानकारी\n• *help* — emergency',
       }[lang];
     }
 
