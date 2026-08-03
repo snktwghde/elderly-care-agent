@@ -172,7 +172,33 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
       }
       const mentionsHospitalisation = /hospit|admit|दाखल|भर्ती|bhrti|\bward\b|\bICU\b/i.test(input);
       if (mentionsHospitalisation) {
-        // Strip hospitalisation-related words to find other medical content in the same message
+        // Try to extract year and reason from the message directly — skip redundant follow-up questions
+        const yearMatch = input.match(/\b(19|20)\d{2}\b/);
+        const reasonMatch = input.match(/\bfor\s+([\w\s]{2,30}?)(?:\s*[,.]|\s+all\s+|\s*$)/i)
+          || input.match(/\bdue\s+to\s+([\w\s]{2,30}?)(?:\s*[,.]|\s*$)/i);
+        const extractedYear = yearMatch ? yearMatch[0] : null;
+        const extractedReason = reasonMatch ? reasonMatch[1].trim() : null;
+
+        if (extractedYear && extractedReason) {
+          const detail = `Hospitalisation (${extractedYear}): ${extractedReason}`;
+          const existing = recipient?.medical_history || '';
+          const combined = existing ? `${existing}\n${detail}` : detail;
+          await updateCareRecipient(account_phone, { medical_history: combined.slice(0, 500) });
+          await updateAccount(account_phone, { pending_action: null, pending_data: null });
+          return HEALTH_CARD_SAVED[lang];
+        }
+
+        if (extractedYear) {
+          // Year found but reason not extractable — skip "when" question, go straight to "why"
+          await updateAccount(account_phone, { pending_action: 'health_card_hospitalization_reason', pending_data: { hospitalization_when: extractedYear } });
+          return {
+            english: `What was the reason for the hospitalisation in ${extractedYear}? (e.g. dengue, surgery, fracture)\n\nType *skip* to finish.`,
+            marathi: `${extractedYear} मधील हॉस्पिटलायझेशनचे कारण काय होते? (उदा. dengue, शस्त्रक्रिया)\n\nसंपवायचे असल्यास *skip* टाइप करा.`,
+            hindi:   `${extractedYear} में hospitalisation का कारण क्या था? (जैसे dengue, surgery)\n\nखत्म करने के लिए *skip* लिखें.`,
+          }[lang];
+        }
+
+        // No year extractable — use 2-step flow
         const withoutHospi = input
           .replace(/\b(past\s+)?hospit\w*/gi, '')
           .replace(/\b(was\s+|been\s+|got\s+)?admit\w*/gi, '')
@@ -181,7 +207,6 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
           .trim();
         const hasOtherContent = withoutHospi.replace(/[^a-zA-Zऀ-ॿ]/g, '').length > 8;
         if (hasOtherContent) {
-          // Save the non-hospitalisation content; the follow-up will append the structured entry
           await updateCareRecipient(account_phone, { medical_history: input.slice(0, 500) });
         }
         await updateAccount(account_phone, { pending_action: 'health_card_hospitalization_when', pending_data: null });

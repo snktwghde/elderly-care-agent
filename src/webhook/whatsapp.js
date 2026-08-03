@@ -326,9 +326,9 @@ async function handleClinicSelection(account, messageText, lang, recipient) {
   });
 
   return {
-    english: `📞 *${clinic.name}*\n\n${clinic.phone}\n\n📍 ${clinic.address}\n\nReply *Yes* once you've called and booked.\nPrefer to walk in? Just go directly — after your visit, type *prescribed medicines* to set your reminders.\nNeed more options? Type *more*.`,
-    marathi: `📞 *${clinic.name}*\n\n${clinic.phone}\n\n📍 ${clinic.address}\n\nCall करून appointment घेतली का? *हो* म्हणा.\nStraight जाणार? भेटीनंतर *prescribed medicines* टाइप करा reminders साठी.\nआणखी पर्याय? *more* टाइप करा.`,
-    hindi:   `📞 *${clinic.name}*\n\n${clinic.phone}\n\n📍 ${clinic.address}\n\nCall करके appointment ली? *हाँ* कहें।\nStraight जाना है? Visit के बाद *prescribed medicines* लिखें reminders के लिए।\nAur options? *more* लिखें।`,
+    english: `📞 *${clinic.name}*\n\n${clinic.phone}\n\n📍 ${clinic.address}\n\nReply *Yes* once you've called and booked.\nGoing directly? Tell us the *clinic name* and *time* — we'll log it and alert your family. After your visit, type *prescribed medicines* to set reminders.\nNeed more options? Type *more*.`,
+    marathi: `📞 *${clinic.name}*\n\n${clinic.phone}\n\n📍 ${clinic.address}\n\nCall करून appointment घेतली का? *हो* म्हणा.\nथेट जाणार? *Clinic चे नाव* आणि *वेळ* सांगा — आम्ही नोंद करतो आणि कुटुंबाला कळवतो. भेटीनंतर *prescribed medicines* टाइप करा.\nआणखी पर्याय? *more* टाइप करा.`,
+    hindi:   `📞 *${clinic.name}*\n\n${clinic.phone}\n\n📍 ${clinic.address}\n\nCall करके appointment ली? *हाँ* कहें।\nसीधे जा रहे हैं? *Clinic का नाम* और *समय* बताएं — हम नोट करेंगे और परिवार को बताएंगे। Visit के बाद *prescribed medicines* लिखें।\nAur options? *more* लिखें।`,
   }[lang];
 }
 
@@ -511,10 +511,17 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
   if (pending_action === 'awaiting_appointment_time_input') {
     const clinic = account.pending_data?.selected_clinic || {};
+    // Translate Marathi time expressions before sending to Haiku
+    const normalizedTime = messageText.trim()
+      .replace(/(\d+)\s*(?:vajta|वाजता)/gi, '$1 o\'clock')
+      .replace(/\b(?:sakali|सकाळी)\b/gi, 'morning')
+      .replace(/\b(?:dupari|दुपारी)\b/gi, 'afternoon')
+      .replace(/\b(?:sandhyakali|संध्याकाळी)\b/gi, 'evening')
+      .replace(/\b(?:ratri|रात्री)\b/gi, 'night');
     // When clinic name is unknown, pass raw message so parseAppointmentDetails can extract both clinic and time
     const inputForParsing = clinic.name
-      ? `appointment at ${clinic.name} at ${messageText.trim()}`
-      : messageText.trim();
+      ? `appointment at ${clinic.name} at ${normalizedTime}`
+      : normalizedTime;
     const details = await parseAppointmentDetails(inputForParsing);
     if (details.clinic_name && !clinic.name) clinic.name = details.clinic_name;
     const appointmentTime = details.time_display;
@@ -1241,7 +1248,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
 
 async function buildReply(parsed, account, lang, recipient, messageText) {
   // Farewell / dismissal — respond warmly, no capability list
-  if (/\b(nothing|no\s+thanks?|not\s+now|that'?s?\s+(all|it)|all\s+good|no\s+need|nahi\s+chahiye|नाही\s+लागत|kuch\s+nahi|नहीं\s+चाहिए)\b/i.test(messageText)
+  if (/\b(nothing|no\s+thanks?|not\s+now|that'?s?\s+(all|it)|all\s+good|no\s+need|nahi\s+chahiye|नाही\s+लागत|kuch\s+nahi|नहीं\s+चाहिए|okay\s+thanks?|ok\s+thanks?|kahi\s+nahi|काही\s+नाही|kahi\s+nako|काही\s+नको)\b/i.test(messageText)
       || /^(thank\s*(you|u)?s?|thanks?|shukriya|dhanyawad|शुक्रिया|धन्यवाद|aabhar|आभार|bye|goodbye)\b/i.test(messageText.trim())) {
     return {
       english: `Of course! Have a good day. 😊 Message anytime you need help.`,
