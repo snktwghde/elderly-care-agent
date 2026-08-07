@@ -453,7 +453,8 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const isYes    = /^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|confirmed|done|zali|झाली|book zali)$/i.test(choice);
     const isNo     = /^(no|nahi|नाही|नहीं|cancel)$/i.test(choice);
     const isWalkIn = /^(walk.?in|walkin|walk in|came|visited|आज|आलो|आले|भेटलो|भेटले|मिले|आया)$/i.test(choice)
-      || /\bprescri(bed?|ption)\b/i.test(choice);
+      || /\bprescri(bed?|ption)\b/i.test(choice)
+      || /\bgoing\s+direct(ly)?\b|\bgo\s+direct(ly)?\b|\bi'?m\s+going\s+direct(ly)?\b|\bdirect(ly)?\s+ja(to|tey|nar|nar)?\b/i.test(choice);
 
     if (isWalkIn) {
       updateAffirmativePattern(account_phone, choice).catch(() => {});
@@ -1228,6 +1229,15 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   }
 
   if (HEALTH_CARD_SETUP_STATES.includes(pending_action)) {
+    if (pending_action === 'health_card_offer_pending') {
+      const isHCYes = /^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|हो\s*जी|हां|ho ja)$/i.test(messageText.trim());
+      const isHCDismiss = /^(no|nahi|नाही|नहीं|cancel|skip|later|nako|not now|नको)$/i.test(messageText.trim());
+      if (!isHCYes && !isHCDismiss) {
+        await updateAccount(account_phone, { pending_action: null });
+        const parsed = await parseIntent(messageText, lang, account, recipient);
+        return await buildReply(parsed, { ...account, pending_action: null }, lang, recipient, messageText);
+      }
+    }
     return await handleHealthCardSetup(account, messageText, lang, recipient);
   }
 
@@ -1373,9 +1383,9 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
       }[lang];
     }
     const hasHealthCardData = recipient.blood_group ||
-      (recipient.medication_schedule || []).length > 0 ||
       (recipient.allergies || []).length > 0 ||
       (recipient.major_illnesses || []).length > 0 ||
+      (recipient.surgeries || []).length > 0 ||
       recipient.medical_history;
     if (!hasHealthCardData) {
       const isSelf15 = true;
