@@ -1303,6 +1303,14 @@ async function buildReply(parsed, account, lang, recipient, messageText) {
     return await handleConfirmAppointment(messageText, account, lang, recipient);
   }
 
+  // Keyword fallback: "set medicines"/"set reminders" that Haiku misparsed as unknown
+  if (parsed.intent === 'unknown'
+      && /\b(set\s+)?(medicine|medication)s?\s*(reminder)?s?\b/i.test(messageText)
+      && !/\bprescribed?\b/i.test(messageText)
+      && !/\b(my|view|see|show|check)\b/i.test(messageText)) {
+    parsed = { ...parsed, intent: 'medication_reminder' };
+  }
+
   if (parsed.intent === 'medication_reminder') {
     const isSelf = true;
     const name = isSelf ? (lang === 'english' ? 'you' : null) : recipient?.recipient_name || 'they';
