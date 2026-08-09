@@ -6,7 +6,7 @@ import { sendTextMessage } from '../services/whatsapp.js';
 import { handleOnboarding } from '../services/onboarding.js';
 import { createSubscription, getPaymentLink } from '../services/razorpay.js';
 import { generateHealthCard, sendHealthCardOffer, startHealthCardSetup, handleHealthCardSetup, startHealthCardFieldUpdate, handleHealthCardUpdate } from '../services/health-card.js';
-import { findNearbyClinics, findMoreClinics } from '../services/maps.js';
+import { findNearbyClinics } from '../services/maps.js';
 import {
   updateClinicInsight, updateMedicationInsight, updateLanguageInsight,
   updateMessagePattern, updateAffirmativePattern, updateNegativePattern,
@@ -300,7 +300,7 @@ async function handleClinicSelection(account, messageText, lang, recipient) {
   if (!clinic.phone) {
     await updateAccount(account.account_phone, {
       pending_action: 'awaiting_no_phone_clinic_type',
-      pending_data: { selected_clinic: clinic, next_page_token: account.pending_data?.next_page_token || null },
+      pending_data: { selected_clinic: clinic, clinics: account.pending_data?.clinics || [], clinic_offset: account.pending_data?.clinic_offset ?? 5 },
     });
     return {
       english: isSelf
@@ -321,7 +321,8 @@ async function handleClinicSelection(account, messageText, lang, recipient) {
     pending_action: 'awaiting_booking_confirmation',
     pending_data: {
       selected_clinic: clinic,
-      next_page_token: account.pending_data?.next_page_token || null,
+      clinics: account.pending_data?.clinics || [],
+      clinic_offset: account.pending_data?.clinic_offset ?? 5,
     },
   });
 
@@ -340,19 +341,9 @@ function isMoreRequest(text) {
 }
 
 async function handleMoreClinics(account, lang) {
-  const token = account.pending_data?.next_page_token;
+  const { clinics, clinic_offset } = account.pending_data || {};
 
-  if (!token) {
-    return {
-      english: 'No more clinics available nearby.',
-      marathi: 'जवळपास आणखी क्लिनिक उपलब्ध नाहीत.',
-      hindi:   'आस-पास और कोई क्लिनिक उपलब्ध नहीं है।',
-    }[lang];
-  }
-
-  const { clinics, nextPageToken } = await findMoreClinics(token);
-
-  if (!clinics || clinics.length === 0) {
+  if (!clinics || !clinics.length || clinic_offset == null || clinic_offset >= clinics.length) {
     return {
       english: `No more clinics found nearby.\n\nYou can try a different search — e.g. type *skin doctor* or *heart doctor*.`,
       marathi: `जवळपास आणखी clinic सापडले नाहीत.\n\nवेगळा शोध घेण्याचा प्रयत्न करा — उदा. *skin doctor* किंवा *heart doctor* टाइप करा.`,
@@ -360,15 +351,15 @@ async function handleMoreClinics(account, lang) {
     }[lang];
   }
 
+  const nextBatch = clinics.slice(clinic_offset, clinic_offset + 5);
+  const newOffset = clinic_offset + 5;
+
   await updateAccount(account.account_phone, {
-    pending_data: {
-      clinics,
-      next_page_token: nextPageToken || null,
-    },
+    pending_data: { ...account.pending_data, clinic_offset: newOffset },
   });
 
   const recipient = await getPrimaryCareRecipient(account.account_phone);
-  return formatClinicList(clinics, null, lang, !!nextPageToken, true, recipient?.recipient_name || '');
+  return formatClinicList(nextBatch, null, lang, newOffset < clinics.length, true, recipient?.recipient_name || '');
 }
 
 // ─── Appointment save + medication handoff ────────────────────────────────────
@@ -1620,9 +1611,9 @@ async function handleBookAppointment(parsed, account, lang, recipient) {
 }
 
 async function searchAndFormatClinics(recipient, specialty, lang, isSelf = true) {
-  let clinics, nextPageToken;
+  let clinics;
   try {
-    ({ clinics, nextPageToken } = await findNearbyClinics(recipient.home_address, specialty));
+    ({ clinics } = await findNearbyClinics(recipient.home_address, specialty));
   } catch (e) {
     console.error('[Maps API error]', e.message);
     return {
@@ -1642,12 +1633,12 @@ async function searchAndFormatClinics(recipient, specialty, lang, isSelf = true)
 
   await updateAccount(recipient.account_phone, {
     pending_data: {
-      clinics,
-      next_page_token: nextPageToken || null,
+      clinics,          // all results with phones
+      clinic_offset: 5, // next "More" starts here
     },
   });
 
-  return formatClinicList(clinics, specialty, lang, !!nextPageToken, isSelf, recipient?.recipient_name || '');
+  return formatClinicList(clinics.slice(0, 5), specialty, lang, clinics.length > 5, isSelf, recipient?.recipient_name || '');
 }
 
 function formatClinicList(clinics, specialty, lang, hasMore, isSelf = true, recipientName = '') {

@@ -227,7 +227,7 @@ export async function getCachedClinics(cacheKey) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const { data } = await supabase
     .from('clinic_cache')
-    .select('clinics, next_page_token, lat, lng, keyword')
+    .select('clinics, lat, lng, keyword')
     .eq('cache_key', cacheKey)
     .gte('cached_at', sevenDaysAgo)
     .single();
@@ -238,7 +238,6 @@ export async function cacheClinics(cacheKey, result) {
   await supabase.from('clinic_cache').upsert({
     cache_key: cacheKey,
     clinics: result.clinics,
-    next_page_token: result.nextPageToken || null,
     lat: result.lat,
     lng: result.lng,
     keyword: result.keyword,

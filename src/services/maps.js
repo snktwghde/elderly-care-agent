@@ -85,19 +85,11 @@ export async function findNearbyClinics(homeAddress, specialty = null) {
 
   const { lat, lng } = await geocodeAddress(homeAddress);
   const keyword = specialty ? mapSpecialtyKeyword(specialty) : 'clinic';
-  const { results, nextPageToken } = await searchNearby(lat, lng, keyword);
-  const clinics = await formatPlaces(results.slice(0, 5));
+  const { results } = await searchNearby(lat, lng, keyword);
+  const clinics = await formatPlaces(results); // fetch phones for all results upfront
 
-  const result = { clinics, nextPageToken, lat, lng, keyword };
+  const result = { clinics, lat, lng, keyword };
   cacheClinics(cacheKey, result).catch(e => console.error('[Maps cache write]', e.message));
 
   return result;
-}
-
-export async function findMoreClinics(pageToken) {
-  // Google requires a short delay before using a page token
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  const { results, nextPageToken } = await searchNearby(null, null, null, pageToken);
-  const clinics = await formatPlaces(results.slice(0, 5));
-  return { clinics, nextPageToken };
 }
