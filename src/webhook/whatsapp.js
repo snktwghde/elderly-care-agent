@@ -279,7 +279,9 @@ function isNewCommandOverride(text, account) {
 // ─── Clinic selection (user replies 1–5 after seeing clinic list) ─────────────
 
 function isClinicSelection(text, account) {
-  return account.pending_data?.clinics?.length > 0 && /^[1-5]$/.test(text.trim());
+  const n = parseInt(text.trim());
+  const total = account.pending_data?.clinics?.length || 0;
+  return total > 0 && /^\d+$/.test(text.trim()) && n >= 1 && n <= total;
 }
 
 async function handleClinicSelection(account, messageText, lang, recipient) {
@@ -353,13 +355,14 @@ async function handleMoreClinics(account, lang) {
 
   const nextBatch = clinics.slice(clinic_offset, clinic_offset + 5);
   const newOffset = clinic_offset + 5;
+  const startNum = clinic_offset + 1; // continuous numbering: 6, 11, 16…
 
   await updateAccount(account.account_phone, {
     pending_data: { ...account.pending_data, clinic_offset: newOffset },
   });
 
   const recipient = await getPrimaryCareRecipient(account.account_phone);
-  return formatClinicList(nextBatch, null, lang, newOffset < clinics.length, true, recipient?.recipient_name || '');
+  return formatClinicList(nextBatch, null, lang, newOffset < clinics.length, true, recipient?.recipient_name || '', startNum);
 }
 
 // ─── Appointment save + medication handoff ────────────────────────────────────
@@ -1641,7 +1644,7 @@ async function searchAndFormatClinics(recipient, specialty, lang, isSelf = true)
   return formatClinicList(clinics.slice(0, 5), specialty, lang, clinics.length > 5, isSelf, recipient?.recipient_name || '');
 }
 
-function formatClinicList(clinics, specialty, lang, hasMore, isSelf = true, recipientName = '') {
+function formatClinicList(clinics, specialty, lang, hasMore, isSelf = true, recipientName = '', startNum = 1) {
   const header = {
     english: `Here are the nearest ${specialty ? specialty + ' hospitals' : 'clinics'} near ${isSelf ? 'you' : `${recipientName}'s home`}:\n\n`,
     marathi: `${isSelf ? 'तुमच्या' : `${recipientName} यांच्या`} जवळचे ${specialty ? specialty + ' हॉस्पिटल' : 'क्लिनिक'}:\n\n`,
@@ -1652,19 +1655,21 @@ function formatClinicList(clinics, specialty, lang, hasMore, isSelf = true, reci
     const rating = c.rating ? ` ⭐ ${c.rating}` : '';
     const reviews = c.reviews ? ` (${c.reviews} reviews)` : '';
     const phone = c.phone ? `\n📞 ${c.phone}` : '';
-    return `${i + 1}. *${c.name}*${rating}${reviews}\n${c.address}${phone}`;
+    return `${startNum + i}. *${c.name}*${rating}${reviews}\n${c.address}${phone}`;
   }).join('\n\n');
 
+  const endNum = startNum + clinics.length - 1;
+
   const footer = {
-    english: `\n\nSelect a number 1–5 to get clinic details and book. Type *more* for more options.\nNeed a specialist? Just say — e.g. "eye doctor" or "heart doctor"`,
-    marathi: `\n\nClinic details आणि booking साठी 1–5 नंबर निवडा. *more* टाइप करा अजून पर्यायांसाठी.\nतज्ज्ञ डॉक्टर हवे? सांगा — उदा. "डोळ्यांचे डॉक्टर"`,
-    hindi:   `\n\nClinic details और booking के लिए 1–5 नंबर चुनें। *more* लिखें और options के लिए।\nविशेषज्ञ चाहिए? बताएं — जैसे "आँख का डॉक्टर"`,
+    english: `\n\nSelect a number ${startNum}–${endNum} to get clinic details and book. Type *more* for more options.\nNeed a specialist? Just say — e.g. "eye doctor" or "heart doctor"`,
+    marathi: `\n\nClinic details आणि booking साठी ${startNum}–${endNum} नंबर निवडा. *more* टाइप करा अजून पर्यायांसाठी.\nतज्ज्ञ डॉक्टर हवे? सांगा — उदा. "डोळ्यांचे डॉक्टर"`,
+    hindi:   `\n\nClinic details और booking के लिए ${startNum}–${endNum} नंबर चुनें। *more* लिखें और options के लिए।\nविशेषज्ञ चाहिए? बताएं — जैसे "आँख का डॉक्टर"`,
   }[lang];
 
   const noMore = {
-    english: `\n\nSelect a number 1–5 to get clinic details and book.\nNeed a specialist? Just say — e.g. "eye doctor" or "heart doctor"`,
-    marathi: `\n\nClinic details आणि booking साठी 1–5 नंबर निवडा.\nतज्ज्ञ डॉक्टर हवे? सांगा — उदा. "डोळ्यांचे डॉक्टर"`,
-    hindi:   `\n\nClinic details और booking के लिए 1–5 नंबर चुनें।\nविशेषज्ञ चाहिए? बताएं — जैसे "आँख का डॉक्टर"`,
+    english: `\n\nSelect a number ${startNum}–${endNum} to get clinic details and book.\nNeed a specialist? Just say — e.g. "eye doctor" or "heart doctor"`,
+    marathi: `\n\nClinic details आणि booking साठी ${startNum}–${endNum} नंबर निवडा.\nतज्ज्ञ डॉक्टर हवे? सांगा — उदा. "डोळ्यांचे डॉक्टर"`,
+    hindi:   `\n\nClinic details और booking के लिए ${startNum}–${endNum} नंबर चुनें।\nविशेषज्ञ चाहिए? बताएं — जैसे "आँख का डॉक्टर"`,
   }[lang];
 
   return header + list + (hasMore ? footer : noMore);
