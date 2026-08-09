@@ -28,6 +28,12 @@ const Q = {
     hindi:   `क्या आपका कोई नियमित डॉक्टर या क्लिनिक है?\n\nनाम और पता दें — जब visit बुक करनी हो, हम contact details दिखाएंगे.\n\nनहीं है तो *skip* लिखें.`,
   },
 
+  doctor_details: {
+    english: `Please share the name and address of your regular doctor or clinic.\n\nType *skip* to do it later.`,
+    marathi: `तुमच्या नेहमीच्या डॉक्टर किंवा क्लिनिकचे नाव आणि पत्ता सांगा.\n\nनंतर करायचे असल्यास *skip* टाइप करा.`,
+    hindi:   `अपने नियमित डॉक्टर या क्लिनिक का नाम और पता बताएं.\n\nबाद में करना हो तो *skip* लिखें.`,
+  },
+
   complete: {
     english: `All set! CareProxy is ready for you.\n\nYou can now:\n• Locate nearby clinics to book doctor appointment\n• Locate specialised hospitals (type *specialised*)\n• Set medication reminders\n• Emergency helplines (type *help* anytime)\n• Sends appointment, medication and emergency alerts to your family\n\nJust send a message anytime.`,
     marathi: `सर्व तयार! CareProxy तुमच्यासाठी तयार आहे.\n\nआता तुम्ही:\n• Doctor appointment साठी जवळचे clinic शोधा\n• तज्ज्ञ हॉस्पिटल शोधा (*specialised* टाइप करा)\n• औषधांची आठवण सेट करा\n• आपत्कालीन helplines (*help* टाइप करा)\n• Appointment, औषध आणि emergency alerts कुटुंबाला पाठवले जातात\n\nकधीही संदेश करा.`,
@@ -103,10 +109,30 @@ export async function handleOnboarding(account, messageText) {
     }
 
     case 'doctor': {
-      const isSkip = messageText.trim().toLowerCase() === 'skip';
+      const isSkip = /^skip$/i.test(messageText.trim());
+      const isYes = /^(yes|yeah|yep|हो|ho|haan|हाँ|ha|हा|ji|जी|sure|ok|okay|हां|bilkul)$/i.test(messageText.trim());
+
+      if (isYes) {
+        await updateAccount(account.account_phone, { onboarding_step: 'doctor_details' });
+        return Q.doctor_details[lang];
+      }
+
       const savedDoctors = isSkip ? [] : [{ info: messageText.trim() }];
       const finalData = { ...data, saved_doctors: savedDoctors };
+      await saveCareRecipient(account, finalData);
+      await updateAccount(account.account_phone, {
+        account_type: 'self',
+        onboarding_complete: true,
+        onboarding_step: 'complete',
+        onboarding_data: null,
+      });
+      return Q.complete[lang];
+    }
 
+    case 'doctor_details': {
+      const isSkip = /^skip$/i.test(messageText.trim());
+      const savedDoctors = isSkip ? [] : [{ info: messageText.trim() }];
+      const finalData = { ...data, saved_doctors: savedDoctors };
       await saveCareRecipient(account, finalData);
       await updateAccount(account.account_phone, {
         account_type: 'self',
