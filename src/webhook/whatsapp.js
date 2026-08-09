@@ -351,6 +351,15 @@ async function handleMoreClinics(account, lang) {
   }
 
   const { clinics, nextPageToken } = await findMoreClinics(token);
+
+  if (!clinics || clinics.length === 0) {
+    return {
+      english: `No more clinics found nearby.\n\nYou can try a different search — e.g. type *skin doctor* or *heart doctor*.`,
+      marathi: `जवळपास आणखी clinic सापडले नाहीत.\n\nवेगळा शोध घेण्याचा प्रयत्न करा — उदा. *skin doctor* किंवा *heart doctor* टाइप करा.`,
+      hindi:   `पास में और clinic नहीं मिले।\n\nकोई और खोज करें — जैसे *skin doctor* या *heart doctor* लिखें।`,
+    }[lang];
+  }
+
   await updateAccount(account.account_phone, {
     pending_data: {
       clinics,
