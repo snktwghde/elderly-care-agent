@@ -76,7 +76,7 @@ export async function findNearbyClinics(homeAddress, specialty = null) {
   if (cached) {
     return {
       clinics: cached.clinics,
-      nextPageToken: cached.next_page_token,
+      nextPageToken: null, // page tokens expire in minutes — never return a cached one
       lat: cached.lat,
       lng: cached.lng,
       keyword: cached.keyword,
