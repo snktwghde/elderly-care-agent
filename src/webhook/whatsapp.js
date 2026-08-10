@@ -1738,8 +1738,8 @@ async function handleSOS(account, lang, recipient) {
       : `🆘 *${name}* यांना मदत हवी आहे!\n\n${callLine}\n\n— CareProxy`;
 
     const ambulanceMsg = lang === 'hindi'
-      ? `🚑 एम्बुलेंस नंबर:\n\n• सरकारी एम्बुलेंस: tel:108\n• पुलिस + आपातकाल: tel:112`
-      : `🚑 Ambulance नंबर:\n\n• सरकारी Ambulance: tel:108\n• पोलीस + आपत्काल: tel:112`;
+      ? `🚑 एम्बुलेंस नंबर:\n\n• सरकारी एम्बुलेंस: tel:108\n• पुलिस: tel:100\n• आपातकाल: tel:112`
+      : `🚑 Ambulance नंबर:\n\n• सरकारी Ambulance: tel:108\n• पोलीस: tel:100\n• आपत्काल: tel:112`;
 
     await Promise.all(familyContacts.flatMap(p => [
       sendTextMessage(p, alertMsg).catch(e => console.error(`SOS alert failed to ${p.slice(0, 5)}***:`, e.message)),
@@ -1764,10 +1764,12 @@ async function handleSOS(account, lang, recipient) {
     ? { english: 'Family has been alerted.', marathi: 'कुटुंबाला कळवले.', hindi: 'परिवार को सूचित किया।' }[lang]
     : '';
 
+  const userHealthSection = hasHealthCard ? `\n\n${generateHealthCard(recipient)}` : cardNote;
+
   return {
-    english: `🆘 Emergency helplines:\n\n• Ambulance: tel:108\n• Police & Emergency: tel:112\n\n${familyAlerted}${cardNote}`,
-    marathi: `🆘 आपत्कालीन helplines:\n\n• Ambulance: tel:108\n• पोलीस आणि आपत्काल: tel:112\n\n${familyAlerted}${cardNote}`,
-    hindi:   `🆘 आपातकालीन helplines:\n\n• Ambulance: tel:108\n• पुलिस और आपातकाल: tel:112\n\n${familyAlerted}${cardNote}`,
+    english: `🆘 Emergency helplines:\n\n• Ambulance: tel:108\n• Police: tel:100\n• Emergency: tel:112\n\n${familyAlerted}${userHealthSection}`,
+    marathi: `🆘 आपत्कालीन helplines:\n\n• Ambulance: tel:108\n• पोलीस: tel:100\n• आपत्काल: tel:112\n\n${familyAlerted}${userHealthSection}`,
+    hindi:   `🆘 आपातकालीन helplines:\n\n• Ambulance: tel:108\n• पुलिस: tel:100\n• आपातकाल: tel:112\n\n${familyAlerted}${userHealthSection}`,
   }[lang];
 }
 
