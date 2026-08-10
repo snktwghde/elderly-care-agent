@@ -1823,7 +1823,7 @@ async function sendTrialStartedMessage(phone) {
     if (account.razorpay_subscription_id) return;
     const { id, paymentUrl } = await createSubscription(phone);
     await updateAccount(phone, { razorpay_subscription_id: id });
-    const msg = `🎉 Your 7-day free trial has started!\n\nAfter your trial, subscribe for ₹499/month to keep using CareProxy:\n\n${paymentUrl}\n\n_No action needed right now. Enjoy your trial!_`;
+    const msg = `🎉 Your 7-day free trial has started!\n\nAfter your trial, subscribe for ₹199/month to keep using CareProxy:\n\n${paymentUrl}\n\n_No action needed right now. Enjoy your trial!_`;
     await sendTextMessage(phone, msg);
     await saveMessage(phone, 'assistant', msg);
   } catch (e) {
@@ -1846,9 +1846,9 @@ async function getExpiredReply(account, lang) {
   }
   const linkLine = paymentUrl ? `\n\n${paymentUrl}` : '';
   return {
-    english: `Your 7-day free trial has ended.\n\n⚠️ Only emergency help (*help* anytime) remains active.\n\nSubscribe for ₹499/month to restore clinic search, medication reminders, and family alerts:${linkLine}`,
-    marathi: `तुमचा ७ दिवसांचा free trial संपला.\n\n⚠️ फक्त emergency help (*help* टाइप करा) सुरू आहे.\n\nClinic search, औषध reminders आणि family alerts परत सुरू करण्यासाठी ₹499/महिना subscribe करा:${linkLine}`,
-    hindi:   `आपका ७ दिन का free trial खत्म हो गया।\n\n⚠️ केवल emergency help (*help* लिखें) अभी भी active है।\n\n₹499/महीना subscribe करके clinic search, दवाई reminders और family alerts वापस पाएं:${linkLine}`,
+    english: `Your 7-day free trial has ended.\n\n⚠️ Only emergency help (*help* anytime) remains active.\n\nSubscribe for ₹199/month to restore clinic search, medication reminders, and family alerts:${linkLine}`,
+    marathi: `तुमचा ७ दिवसांचा free trial संपला.\n\n⚠️ फक्त emergency help (*help* टाइप करा) सुरू आहे.\n\nClinic search, औषध reminders आणि family alerts परत सुरू करण्यासाठी ₹199/महिना subscribe करा:${linkLine}`,
+    hindi:   `आपका ७ दिन का free trial खत्म हो गया।\n\n⚠️ केवल emergency help (*help* लिखें) अभी भी active है।\n\n₹199/महीना subscribe करके clinic search, दवाई reminders और family alerts वापस पाएं:${linkLine}`,
   }[lang];
 }
 
