@@ -996,6 +996,14 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const durationDays = parseDuration(messageText);
 
     if (durationDays === -1) {
+      const currentMed = medicines[current_index];
+      if (/\d{1,2}\s*(am|pm)/i.test(messageText)) {
+        return {
+          english: `I see you sent a time — I need to know how long *${currentMed}* should be taken. For example: *7 days*, *2 weeks*, *1 month*, or *lifetime*.`,
+          marathi: `तुम्ही वेळ पाठवली — मला सांगा *${currentMed}* किती दिवस घ्यायचे? उदा: *7 दिवस*, *2 आठवडे*, *1 महिना*, किंवा *lifetime*.`,
+          hindi:   `आपने समय भेजा — मुझे बताएं *${currentMed}* कितने दिन लेना है? जैसे: *7 दिन*, *2 हफ्ते*, *1 महीना*, या *lifetime*.`,
+        }[lang];
+      }
       return {
         english: `Couldn't understand that. Please say something like: *7 days*, *2 weeks*, *1 month*, or *lifetime*.`,
         marathi: `समजले नाही. उदा: *7 दिवस*, *2 आठवडे*, *1 महिना*, किंवा *lifetime*.`,
