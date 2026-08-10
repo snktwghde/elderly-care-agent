@@ -367,7 +367,7 @@ async function handleMoreClinics(account, lang) {
 
 // ─── Appointment save + medication handoff ────────────────────────────────────
 
-async function confirmAndSaveAppointment({ account, account_phone, recipient, lang, clinic, appointmentTime, dateDisplay, datetimeIso }) {
+async function confirmAndSaveAppointment({ account, account_phone, recipient, lang, clinic, appointmentTime, dateDisplay, datetimeIso, isWalkIn = false }) {
   const isSelf = true;
   const recipientName = recipient?.recipient_name || 'them';
 
@@ -385,9 +385,13 @@ async function confirmAndSaveAppointment({ account, account_phone, recipient, la
   const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
   const familyContacts = (recipient.family_contacts || []).filter(p => toE164(p) !== account_phone);
   if (familyContacts.length > 0) {
-    const familyMsg = lang === 'hindi'
-      ? `📅 ${recipient.recipient_name} की appointment confirm हो गई.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${dateDisplay ? '\n📅 ' + dateDisplay : ''}\n\n— CareProxy`
-      : `📅 ${recipient.recipient_name} यांची appointment confirm झाली.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${dateDisplay ? '\n📅 ' + dateDisplay : ''}\n\n— CareProxy`;
+    const familyMsg = isWalkIn
+      ? (lang === 'hindi'
+          ? `📅 ${recipient.recipient_name} *${clinic.name || 'Doctor'}* में ${appointmentTime}${dateDisplay ? ', ' + dateDisplay : ''} को जाने का plan है। — CareProxy`
+          : `📅 ${recipient.recipient_name} *${clinic.name || 'Doctor'}* येथे ${appointmentTime}${dateDisplay ? ', ' + dateDisplay : ''} ला जाणार आहेत. — CareProxy`)
+      : (lang === 'hindi'
+          ? `📅 ${recipient.recipient_name} की appointment confirm हो गई.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${dateDisplay ? '\n📅 ' + dateDisplay : ''}\n\n— CareProxy`
+          : `📅 ${recipient.recipient_name} यांची appointment confirm झाली.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${dateDisplay ? '\n📅 ' + dateDisplay : ''}\n\n— CareProxy`);
     await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
   }
 
@@ -455,13 +459,27 @@ async function handlePendingAction(account, messageText, lang, recipient) {
   if (pending_action === 'awaiting_booking_confirmation') {
     const isYes    = /^(yes|हो|ho|haan|हाँ|ha|हा|ok|okay|confirmed|done|zali|झाली|book zali)$/i.test(choice);
     const isNo     = /^(no|nahi|नाही|नहीं|cancel)$/i.test(choice);
-    const isWalkIn = /^(walk.?in|walkin|walk in|came|visited|आज|आलो|आले|भेटलो|भेटले|मिले|आया)$/i.test(choice)
-      || /\bprescri(bed?|ption)\b/i.test(choice)
-      || /\bgoing\s+direct(ly)?\b|\bgo\s+direct(ly)?\b|\bi'?m\s+going\s+direct(ly)?\b|\bdirect(ly)?\s+ja(to|tey|nar|nar)?\b/i.test(choice);
+    const isGoingDirectly = /\bgoing\s+direct(ly)?\b|\bgo\s+direct(ly)?\b|\bi'?m\s+going\s+direct(ly)?\b|\bdirect(ly)?\s+ja(to|tey|nar|nar)?\b/i.test(choice)
+      || /^(walk.?in|walkin|walk in)$/i.test(choice);
+    const isAlreadyVisited = /^(came|visited|आलो|आले|भेटलो|भेटले|मिले|आया)$/i.test(choice)
+      || /\bprescri(bed?|ption)\b/i.test(choice);
+    const isWalkIn = isGoingDirectly || isAlreadyVisited;
 
-    if (isWalkIn) {
+    if (isGoingDirectly) {
+      const clinic = account.pending_data?.selected_clinic;
+      await updateAccount(account_phone, {
+        pending_action: 'awaiting_appointment_time_input',
+        pending_data: { ...account.pending_data, is_walkin: true },
+      });
+      return {
+        english: `Got it! You're heading to *${clinic?.name || 'the clinic'}* — great! 👍\n\nWhat time and day are you planning to visit?\n\nFor example: *today 4pm*, *tomorrow 11am*`,
+        marathi: `ठीक आहे! *${clinic?.name || 'clinic'}* येथे जाणार — छान! 👍\n\nकोणत्या वेळी आणि दिवशी जाणार आहात?\n\nउदा: *आज 4 वाजता*, *उद्या सकाळी 11*`,
+        hindi:   `ठीक है! *${clinic?.name || 'clinic'}* जा रहे हैं — बढ़िया! 👍\n\nकितने बजे और किस दिन जाने का plan है?\n\nजैसे: *आज 4 बजे*, *कल सुबह 11 बजे*`,
+      }[lang];
+    }
+
+    if (isAlreadyVisited) {
       updateAffirmativePattern(account_phone, choice).catch(() => {});
-      const isSelf = true;
       const clinic = account.pending_data?.selected_clinic;
       const toE164 = p => p.startsWith('+') ? p : `+${p.replace(/\D/g, '')}`;
       const familyContacts = (recipient?.family_contacts || []).filter(p => toE164(p) !== account_phone);
@@ -475,7 +493,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }
       await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: true } });
       return {
-        english: `Got it! Glad ${isSelf ? 'you' : 'they'} saw the doctor. 😊\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
+        english: `Got it! Glad you saw the doctor. 😊\n\nDid the doctor prescribe any new medications? Tell me the names and I'll set reminders.\n\nOr type *skip* if none.`,
         marathi: `ठीक आहे! Doctor ला भेटले, छान! 😊\n\nDoctor ने नवीन औषधे दिली का? नावे सांगा, मी reminders सेट करतो.\n\nनसल्यास *skip* टाइप करा.`,
         hindi:   `ठीक है! Doctor से मिले, अच्छा हुआ। 😊\n\nDoctor ने कोई नई दवाइयाँ दी हैं? नाम बताएं, मैं reminders सेट कर दूंगा।\n\nनहीं दी तो *skip* लिखें।`,
       }[lang];
@@ -553,6 +571,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     return await confirmAndSaveAppointment({
       account, account_phone, recipient, lang, clinic,
       appointmentTime, dateDisplay: details.date_display, datetimeIso: details.datetime_iso,
+      isWalkIn: account.pending_data?.is_walkin || false,
     });
   }
 
@@ -574,6 +593,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     return await confirmAndSaveAppointment({
       account, account_phone, recipient, lang, clinic,
       appointmentTime: pendingTime, dateDisplay, datetimeIso: details.datetime_iso,
+      isWalkIn: account.pending_data?.is_walkin || false,
     });
   }
 
