@@ -256,8 +256,8 @@ function isNewCommandOverride(text, account) {
 
   // Mid-medication-flow states: break out on appointment-domain keywords only
   // ('medication'/'reminder' intentionally excluded — they appear in valid answers like "7 din ki medication")
-  if (['awaiting_medication_duration', 'awaiting_medication_frequency', 'awaiting_medication_times'].includes(pending_action)) {
-    return /\b(book|appointment|doctor|clinic|डॉक्टर|अपॉइंटमेंट|cancel|रद्द|start over)\b/i.test(text.trim());
+  if (['awaiting_medication_names', 'awaiting_medication_duration', 'awaiting_medication_frequency', 'awaiting_medication_times'].includes(pending_action)) {
+    return /\b(book|appointment|doctor|clinic|find|डॉक्टर|अपॉइंटमेंट|cancel|रद्द|start over)\b/i.test(text.trim());
   }
 
   // Medication action menu: only known actions stay; everything else goes to intent detection
