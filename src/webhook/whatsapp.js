@@ -466,15 +466,14 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const isWalkIn = isGoingDirectly || isAlreadyVisited;
 
     if (isGoingDirectly) {
-      const clinic = account.pending_data?.selected_clinic;
       await updateAccount(account_phone, {
         pending_action: 'awaiting_appointment_time_input',
-        pending_data: { ...account.pending_data, is_walkin: true },
+        pending_data: { ...account.pending_data, selected_clinic: {}, is_walkin: true },
       });
       return {
-        english: `Got it! You're heading to *${clinic?.name || 'the clinic'}* — great! 👍\n\nWhat time and day are you planning to visit?\n\nFor example: *today 4pm*, *tomorrow 11am*`,
-        marathi: `ठीक आहे! *${clinic?.name || 'clinic'}* येथे जाणार — छान! 👍\n\nकोणत्या वेळी आणि दिवशी जाणार आहात?\n\nउदा: *आज 4 वाजता*, *उद्या सकाळी 11*`,
-        hindi:   `ठीक है! *${clinic?.name || 'clinic'}* जा रहे हैं — बढ़िया! 👍\n\nकितने बजे और किस दिन जाने का plan है?\n\nजैसे: *आज 4 बजे*, *कल सुबह 11 बजे*`,
+        english: `Got it! 👍\n\nWhich clinic are you heading to, and at what time?\n\nFor example: *Sai Clinic, today 4pm* or *City Hospital tomorrow 11am*`,
+        marathi: `ठीक आहे! 👍\n\nकोणत्या clinic ला जाणार आहात आणि कोणत्या वेळी?\n\nउदा: *Sai Clinic, आज 4 वाजता* किंवा *City Hospital उद्या 11 वाजता*`,
+        hindi:   `ठीक है! 👍\n\nकिस clinic जा रहे हैं और कितने बजे?\n\nजैसे: *Sai Clinic, आज 4 बजे* या *City Hospital कल 11 बजे*`,
       }[lang];
     }
 
