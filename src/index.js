@@ -40,6 +40,7 @@ app.use('/webhook/razorpay', webhookLimiter, express.raw({ type: 'application/js
 app.use('/webhook', webhookLimiter, express.json({ verify: verifyMetaSignature }));
 app.use(express.json());
 
+app.get('/', (_req, res) => res.send('OK'));
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'CareProxy' }));
 
 app.use('/webhook', whatsappWebhook);
