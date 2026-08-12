@@ -21,3 +21,29 @@ export async function sendTextMessage(to, body) {
 
   return response.data;
 }
+
+export async function sendTemplateMessage(to, templateName, langCode, params = []) {
+  const payload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: langCode },
+      components: params.length ? [{
+        type: 'body',
+        parameters: params.map(text => ({ type: 'text', text })),
+      }] : [],
+    },
+  };
+
+  const response = await axios.post(BASE_URL, payload, {
+    headers: {
+      Authorization: `Bearer ${config.whatsapp.token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  return response.data;
+}

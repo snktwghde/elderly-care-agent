@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { getDueReminders, updateAppointment, getPrimaryCareRecipient, getMedicationSchedules, getMedicationLogToday, createMedicationLog, updateCareRecipient, updateAccount } from './supabase.js';
-import { sendTextMessage } from './whatsapp.js';
+import { sendTextMessage, sendTemplateMessage } from './whatsapp.js';
 
 function toWhatsAppPhone(phone) {
   return phone.startsWith('+') ? phone : `+${phone.replace(/\D/g, '')}`;
@@ -138,11 +138,9 @@ async function processMedicationReminders() {
         // Mark sent BEFORE sending to prevent spam
         await createMedicationLog(recipient.account_phone, medIndex, slot);
 
-        const msg = lang === 'hindi'
-          ? `💊 *${schedule.name}* लेने का समय हो गया।\n\nलेने के बाद *Done* लिखें।`
-          : `💊 *${schedule.name}* घेण्याची वेळ झाली.\n\nघेतल्यावर *Done* म्हणा.`;
-
-        await sendTextMessage(phone, msg).catch(e => console.error(`Medication reminder failed to ${phone.slice(0, 5)}***:`, e.message));
+        const langCode = lang === 'hindi' ? 'hi' : lang === 'english' ? 'en' : 'mr';
+        await sendTemplateMessage(phone, 'medication_reminder', langCode, [schedule.name])
+          .catch(e => console.error(`Medication reminder failed to ${phone.slice(0, 5)}***:`, e.message));
       }
     }
   }
