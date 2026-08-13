@@ -262,7 +262,7 @@ function isNewCommandOverride(text, account) {
 
   // Medication action menu: only known actions stay; everything else goes to intent detection
   if (pending_action === 'awaiting_medication_action') {
-    return !/^(add|replace|update)$/i.test(text.trim());
+    return !/^(add|replace|update)\b/i.test(text.trim());
   }
 
   // Medication conflict: only replace/continue stay; everything else goes to intent detection
@@ -673,7 +673,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
     const { med_schedule = [] } = account.pending_data || {};
     const action = messageText.trim().toLowerCase();
 
-    if (action === 'add') {
+    if (/^add\b/i.test(action)) {
       await updateAccount(account_phone, { pending_action: 'awaiting_medication_names', pending_data: { is_prescription: false } });
       return {
         english: `What new medicines would you like to add? Tell me the names.`,
@@ -682,7 +682,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }[lang];
     }
 
-    if (action === 'replace') {
+    if (/^replace\b/i.test(action)) {
       const medList = med_schedule.map((s, i) => `${i + 1}. *${s.name}*`).join('\n');
       await updateAccount(account_phone, { pending_action: 'awaiting_replace_selection', pending_data: { med_schedule } });
       return {
@@ -692,7 +692,7 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }[lang];
     }
 
-    if (action === 'update') {
+    if (/^update\b/i.test(action)) {
       const medList = med_schedule.map((s, i) => {
         if (!s.frequency || !(s.times || []).length) {
           return `${i + 1}. *${s.name}* _(reminder not set yet)_`;
