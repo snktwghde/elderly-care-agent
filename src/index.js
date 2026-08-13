@@ -1,6 +1,11 @@
 import './config/env.js';
+import * as Sentry from '@sentry/node';
 import crypto from 'crypto';
 import express from 'express';
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0 });
+}
 import { rateLimit } from 'express-rate-limit';
 import { config } from './config/env.js';
 import whatsappWebhook from './webhook/whatsapp.js';
@@ -45,6 +50,10 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'CareProxy' 
 
 app.use('/webhook', whatsappWebhook);
 app.use('/webhook/razorpay', razorpayRoutes);
+
+if (process.env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 app.listen(config.port, () => {
   console.log(`CareProxy running on port ${config.port}`);
