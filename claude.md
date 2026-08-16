@@ -255,12 +255,15 @@ Claude API parses intent (language-agnostic)
 
 1. **Always start in Plan Mode** — never write code without first showing a plan
 2. **One feature at a time** — finish and test before moving to the next
-3. **Test before calling done** — every feature needs a real test, not just "it looks right"
+3. **Verify before calling done** — diff the actual behavior, not just "it looks right"; check logs, run the real flow end-to-end
 4. **Use /compact regularly** — prevents context window issues mid-session
 5. **Screenshot errors** — show Claude the actual error message, never describe it
 6. **Approve before execute** — review every plan, change what's wrong
 7. **CLAUDE.md is the source of truth** — update it when major decisions change
 8. **Never build what wasn't discussed** — scope creep is the enemy of shipping
+9. **Self-improvement loop** — after every bug fix or correction, ask: "What rule would have prevented this?" Write it in `tasks/lessons.md`. Review lessons at the start of every session.
+10. **Demand elegance** — for non-trivial changes, pause and ask "is there a more elegant way?" If a fix feels hacky, it probably is — find the root cause, not the workaround
+11. **Autonomous bug fixing** — when shown a bug screenshot or error log, diagnose the root cause immediately; trace the real flow, point at the exact line, fix it — no hand-holding needed
 
 ---
 
