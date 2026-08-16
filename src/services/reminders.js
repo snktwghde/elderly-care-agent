@@ -71,7 +71,7 @@ async function processReminders() {
     // Single reminder 1 hour before — sent only to the user, not family
     if (!appt.reminder_2h_sent && h >= 0.75 && h <= 1.25) {
       await updateAppointment(appt.id, { reminder_2h_sent: true });
-      const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(clinic + ', Pune')}`;
+      const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(appt.clinic_address || clinic)}`;
       const msg = lang === 'hindi'
         ? `⏰ Reminder: आपकी appointment 1 घंटे में है — ${hindiTime(dt)} ${clinic}।\n\n📍 ${mapsUrl}`
         : `⏰ Reminder: तुमची appointment 1 तासात आहे — ${marathiTime(dt)} ${clinic}.\n\n📍 ${mapsUrl}`;

@@ -376,6 +376,7 @@ async function confirmAndSaveAppointment({ account, account_phone, recipient, la
     recipient_name: recipient.recipient_name,
     clinic_name: clinic.name || 'Doctor',
     clinic_phone: clinic.phone || null,
+    clinic_address: clinic.address || null,
     status: 'confirmed',
     appointment_date: dateDisplay || null,
     appointment_time: appointmentTime,
