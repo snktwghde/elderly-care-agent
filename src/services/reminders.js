@@ -35,6 +35,14 @@ function hindiTime(isoDatetime) {
   return `शाम ${t} बजे`;
 }
 
+function englishTime(isoDatetime) {
+  const d = toIST(isoDatetime);
+  const h = d.getUTCHours();
+  const m = d.getUTCMinutes();
+  const t = `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}`;
+  return `${t} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
 function whenMarathi(isoDatetime) {
   const nowIST  = toIST(new Date().toISOString());
   const apptIST = toIST(isoDatetime);
@@ -63,7 +71,9 @@ async function processReminders() {
     const recipient = await getPrimaryCareRecipient(appt.account_phone);
     if (!recipient) continue;
 
-    const lang = recipient.preferred_language === 'hindi' ? 'hindi' : 'marathi';
+    const lang = recipient.preferred_language === 'hindi' ? 'hindi'
+      : recipient.preferred_language === 'english' ? 'english'
+      : 'marathi';
     const userPhone = toWhatsAppPhone(appt.account_phone);
     const clinic = appt.clinic_name || 'Doctor';
     const dt     = appt.appointment_datetime;
@@ -74,6 +84,8 @@ async function processReminders() {
       const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(appt.clinic_address || clinic)}`;
       const msg = lang === 'hindi'
         ? `⏰ Reminder: आपकी appointment 1 घंटे में है — ${hindiTime(dt)} ${clinic}।\n\n📍 ${mapsUrl}`
+        : lang === 'english'
+        ? `⏰ Reminder: Your appointment is in 1 hour — ${englishTime(dt)} at ${clinic}.\n\n📍 ${mapsUrl}`
         : `⏰ Reminder: तुमची appointment 1 तासात आहे — ${marathiTime(dt)} ${clinic}.\n\n📍 ${mapsUrl}`;
       await sendTextMessage(userPhone, msg).catch(e => console.error(`Reminder failed to ${userPhone.slice(0, 5)}***:`, e.message));
     }
@@ -104,7 +116,9 @@ async function processMedicationReminders() {
     const schedules = recipient.medication_schedule;
     if (!schedules?.length) continue;
 
-    const lang = recipient.preferred_language === 'hindi' ? 'hindi' : 'marathi';
+    const lang = recipient.preferred_language === 'hindi' ? 'hindi'
+      : recipient.preferred_language === 'english' ? 'english'
+      : 'marathi';
     const phone = toWhatsAppPhone(recipient.account_phone);
 
     // ─── Handle expired medicine courses ─────────────────────────────────────
@@ -116,6 +130,8 @@ async function processMedicationReminders() {
       for (const expired of expiredMeds) {
         const msg = lang === 'hindi'
           ? `✅ *${expired.name}* का कोर्स पूरा हो गया — reminders बंद कर दिए।\n\nनई दवाई का reminder सेट करना है? *yes* या *skip* लिखें।`
+          : lang === 'english'
+          ? `✅ *${expired.name}*'s course is complete — reminders have been stopped.\n\nWant to set a reminder for a new medicine? Reply *yes* or *skip*.`
           : `✅ *${expired.name}* चा कोर्स पूर्ण झाला — reminders थांबवले.\n\nनवीन औषधाचे reminder सेट करायचे आहे का? *yes* किंवा *skip* म्हणा.`;
         await sendTextMessage(accountPhone, msg).catch(e => console.error(`Course complete msg failed to ${accountPhone.slice(0, 5)}***:`, e.message));
       }

@@ -389,9 +389,13 @@ async function confirmAndSaveAppointment({ account, account_phone, recipient, la
     const familyMsg = isWalkIn
       ? (lang === 'hindi'
           ? `📅 ${recipient.recipient_name} *${clinic.name || 'Doctor'}* में ${appointmentTime}${dateDisplay ? ', ' + dateDisplay : ''} को जाने का plan है। — CareProxy`
+          : lang === 'english'
+          ? `📅 ${recipient.recipient_name} is planning to visit *${clinic.name || 'Doctor'}* at ${appointmentTime}${dateDisplay ? ', ' + dateDisplay : ''}. — CareProxy`
           : `📅 ${recipient.recipient_name} *${clinic.name || 'Doctor'}* येथे ${appointmentTime}${dateDisplay ? ', ' + dateDisplay : ''} ला जाणार आहेत. — CareProxy`)
       : (lang === 'hindi'
           ? `📅 ${recipient.recipient_name} की appointment confirm हो गई.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${dateDisplay ? '\n📅 ' + dateDisplay : ''}\n\n— CareProxy`
+          : lang === 'english'
+          ? `📅 ${recipient.recipient_name}'s appointment is confirmed.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${dateDisplay ? '\n📅 ' + dateDisplay : ''}\n\n— CareProxy`
           : `📅 ${recipient.recipient_name} यांची appointment confirm झाली.\n\n🏥 ${clinic.name || 'Doctor'}\n🕐 ${appointmentTime}${dateDisplay ? '\n📅 ' + dateDisplay : ''}\n\n— CareProxy`);
     await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
   }
@@ -433,6 +437,8 @@ async function handlePendingAction(account, messageText, lang, recipient) {
         const name = recipient.recipient_name;
         const familyMsg = lang === 'hindi'
           ? `🏥 ${name} ने आज ${clinicName} में doctor से मिले। उनसे पूछें visit कैसी रही। — CareProxy`
+          : lang === 'english'
+          ? `🏥 ${name} visited the doctor at ${clinicName} today. Ask them how the visit went. — CareProxy`
           : `🏥 ${name} आज ${clinicName} मध्ये doctor ला भेटले. त्यांना विचारा visit कशी गेली. — CareProxy`;
         await Promise.all(familyContacts.map(p => sendTextMessage(toE164(p), familyMsg).catch(e => console.error(`Family notify failed to ${p.slice(0, 5)}***:`, e.message))));
       }
@@ -1066,6 +1072,8 @@ async function handlePendingAction(account, messageText, lang, recipient) {
       }).join('\n');
       const familyMsg = lang === 'hindi'
         ? `💊 ${recipient.recipient_name} की दवाइयों के reminders सेट हो गए।\n\n${summary}\n\n— CareProxy`
+        : lang === 'english'
+        ? `💊 Medication reminders have been set for ${recipient.recipient_name}.\n\n${summary}\n\n— CareProxy`
         : `💊 ${recipient.recipient_name} यांच्या औषधांचे reminders सेट झाले.\n\n${summary}\n\n— CareProxy`;
       await Promise.all(familyContacts.map(p => sendTextMessage(toE164Med(p), familyMsg).catch(e => console.error(`Send failed to ${p}:`, e.message))));
     }
@@ -1732,14 +1740,22 @@ async function handleSOS(account, lang, recipient) {
 
   if (familyContacts.length > 0) {
     const callLine = recipientPhone
-      ? (lang === 'hindi' ? `📞 उन्हें अभी call करें: ${recipientPhone}` : `📞 आत्ता call करा: ${recipientPhone}`)
-      : (lang === 'hindi' ? `📞 उन्हें अभी call करें।` : `📞 आत्ता call करा.`);
+      ? (lang === 'hindi' ? `📞 उन्हें अभी call करें: ${recipientPhone}`
+          : lang === 'english' ? `📞 Call them now: ${recipientPhone}`
+          : `📞 आत्ता call करा: ${recipientPhone}`)
+      : (lang === 'hindi' ? `📞 उन्हें अभी call करें।`
+          : lang === 'english' ? `📞 Call them now.`
+          : `📞 आत्ता call करा.`);
     const alertMsg = lang === 'hindi'
       ? `🆘 *${name}* को मदद चाहिए!\n\n${callLine}\n\n— CareProxy`
+      : lang === 'english'
+      ? `🆘 *${name}* needs help!\n\n${callLine}\n\n— CareProxy`
       : `🆘 *${name}* यांना मदत हवी आहे!\n\n${callLine}\n\n— CareProxy`;
 
     const ambulanceMsg = lang === 'hindi'
       ? `🚑 एम्बुलेंस नंबर:\n\n• सरकारी एम्बुलेंस: tel:108\n• पुलिस: tel:100\n• आपातकाल: tel:112`
+      : lang === 'english'
+      ? `🚑 Ambulance numbers:\n\n• Ambulance: tel:108\n• Police: tel:100\n• Emergency: tel:112`
       : `🚑 Ambulance नंबर:\n\n• सरकारी Ambulance: tel:108\n• पोलीस: tel:100\n• आपत्काल: tel:112`;
 
     await Promise.all(familyContacts.flatMap(p => [
