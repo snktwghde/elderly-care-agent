@@ -5,6 +5,12 @@ Review this at the start of every session.
 
 ---
 
+## Language / i18n
+
+**L19 — Two-way ternaries silently drop the third language**
+`lang === 'hindi' ? hindiText : marathiText` was copy-pasted across 9 locations (reminders.js lang derivation + message text, whatsapp.js family notifications and SOS messages). Every one silently routed English-preferred users to Marathi text, since English was never checked for — only assumed to be the "else" of hindi.
+Rule: Any 3-language message must use `lang === 'hindi' ? x : lang === 'english' ? y : z` (or a `{ hindi, english, marathi }[lang]` object lookup, which is self-documenting and can't silently omit a branch). Never write a 2-way ternary for a 3-value field. When adding a new bilingual-looking ternary, grep the file for the same pattern first — it's usually been copy-pasted from an existing (possibly already-broken) one.
+
 ## Regex / Intent Matching
 
 **L1 — Word boundary vs exact match**
