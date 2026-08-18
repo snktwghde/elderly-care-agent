@@ -5,8 +5,8 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "start": "node --import ./src/instrument.js src/index.js",
+    "dev": "nodemon --exec \"node --import ./src/instrument.js src/index.js\"",
     "tunnel": "\"C:\\Users\\DELL\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe\\ngrok.exe\" http --domain=ranging-silliness-banknote.ngrok-free.dev 3000"
   },
   "dependencies": {
