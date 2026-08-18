@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import * as Sentry from '@sentry/node';
 import { config } from '../config/env.js';
 import { parseIntentSafe as parseIntent, parseAppointmentDetails } from '../services/claude.js';
 import { createAppointment, updateCareRecipient, acknowledgeMedicationLog, getOrCreateAccount, updateAccount, getConversationHistory, saveMessage, getPrimaryCareRecipient, logMessage, countUnknownIntentsLastHour } from '../services/supabase.js';
@@ -212,7 +213,9 @@ router.post('/', async (req, res) => {
         if (parsedIntentResult.intent === 'unknown') {
           countUnknownIntentsLastHour(senderPhone).then(count => {
             if (count >= 5) {
-              console.error(`[ALERT] ${senderPhone.slice(0, 5)}*** has ${count} unknown intents in the last hour — possible parsing failure. Message length: ${messageText.length}`);
+              const msg = `${senderPhone.slice(0, 5)}*** has ${count} unknown intents in the last hour — possible parsing failure. Message length: ${messageText.length}`;
+              console.error(`[ALERT] ${msg}`);
+              Sentry.captureMessage(msg, 'warning');
             }
           }).catch(() => {});
         }
@@ -225,6 +228,7 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('Webhook handler error:', err.message);
     if (err.response?.data) console.error('API error detail:', JSON.stringify(err.response.data));
+    Sentry.captureException(err);
   }
 });
 
