@@ -97,6 +97,16 @@ Fix: Store `timezone` (IANA string e.g. "Asia/Kuala_Lumpur") during onboarding. 
 Razorpay accepts international Visa/Mastercard but the setting is off by default. Go to Razorpay Dashboard → Settings → International Payments → Enable. Without this, overseas users cannot pay even if they have a Visa card.
 Note: All charges are in INR — overseas users see ₹199 on the payment page, their bank converts to local currency. Razorpay subscriptions support recurring international card charges.
 
+## Monitoring / Observability
+
+**L20 — Wiring an error-tracking SDK is not the same as using it**
+Sentry was `init()`'d in `src/index.js` on Aug 13, but every catch block in the webhook handler only did `console.error(...)` — nothing ever called `Sentry.captureException`. For 5 days, Sentry showed zero events despite being "integrated," because the SDK was never actually fed anything. Found while checking whether the app was ready for live user testing.
+Rule: after adding any error-tracking/alerting SDK, grep for every `catch` block that matters and confirm it actually calls `captureException`/`captureMessage`. Importing and initializing the SDK proves nothing on its own — verify with a real test event in the dashboard before trusting it.
+
+**L21 — ESM import order silently breaks Sentry's auto-instrumentation**
+`Sentry.init()` was called from inside `index.js`, positioned after `import express from 'express'`. In ESM, all static imports in a file are fully evaluated before the importing module's own top-level code runs — regardless of where they appear textually. So `express` was already loaded, unpatched, before `Sentry.init()` ever executed. Railway's deploy log surfaced it directly: `[Sentry] express is not instrumented`.
+Rule: for ESM apps, `Sentry.init()` must live in its own file, preloaded via `node --import ./instrument.js entry.js` — never called as a regular statement inside the entry file itself, no matter how early it looks positioned.
+
 ## General
 
 **L13 — Hospitalisation is a different intent from clinic booking**
