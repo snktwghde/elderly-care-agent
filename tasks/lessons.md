@@ -95,7 +95,7 @@ Fix: Store `timezone` (IANA string e.g. "Asia/Kuala_Lumpur") during onboarding. 
 
 **L18 — Razorpay international payments need manual enablement**
 Razorpay accepts international Visa/Mastercard but the setting is off by default. Go to Razorpay Dashboard → Settings → International Payments → Enable. Without this, overseas users cannot pay even if they have a Visa card.
-Note: All charges are in INR — overseas users see ₹499 on the payment page, their bank converts to local currency. Razorpay subscriptions support recurring international card charges.
+Note: All charges are in INR — overseas users see ₹199 on the payment page, their bank converts to local currency. Razorpay subscriptions support recurring international card charges.
 
 ## General
 
