@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { getDueReminders, updateAppointment, getPrimaryCareRecipient, getMedicationSchedules, getMedicationLogToday, createMedicationLog, updateCareRecipient, updateAccount } from './supabase.js';
+import { getDueReminders, updateAppointment, getPrimaryCareRecipient, getMedicationSchedules, getMedicationLogToday, createMedicationLog, updateCareRecipient, updateAccount, getOrCreateAccount, getSubscriptionStatus } from './supabase.js';
 import { sendTextMessage, sendTemplateMessage } from './whatsapp.js';
 
 function toWhatsAppPhone(phone) {
@@ -68,6 +68,9 @@ async function processReminders() {
     const h = hoursUntil(appt.appointment_datetime);
     if (h < 0) continue;
 
+    const account = await getOrCreateAccount(appt.account_phone);
+    if (getSubscriptionStatus(account) === 'expired') continue;
+
     const recipient = await getPrimaryCareRecipient(appt.account_phone);
     if (!recipient) continue;
 
@@ -115,6 +118,9 @@ async function processMedicationReminders() {
   for (const recipient of recipients) {
     const schedules = recipient.medication_schedule;
     if (!schedules?.length) continue;
+
+    const account = await getOrCreateAccount(recipient.account_phone);
+    if (getSubscriptionStatus(account) === 'expired') continue;
 
     const lang = recipient.preferred_language === 'hindi' ? 'hindi'
       : recipient.preferred_language === 'english' ? 'english'

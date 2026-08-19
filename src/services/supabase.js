@@ -36,6 +36,15 @@ export async function updateAccount(accountPhone, fields) {
   return data;
 }
 
+export function getSubscriptionStatus(account) {
+  if (account.subscription_status === 'active') return 'active';
+  const trialStart = new Date(account.created_at);
+  if (isNaN(trialStart.getTime())) return 'trial';
+  const trialEnd = new Date(trialStart);
+  trialEnd.setDate(trialEnd.getDate() + 7);
+  return new Date() < trialEnd ? 'trial' : 'expired';
+}
+
 // ─── Care Recipients ──────────────────────────────────────────────────────────
 
 export async function getPrimaryCareRecipient(accountPhone) {

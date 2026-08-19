@@ -2,7 +2,7 @@ import { Router } from 'express';
 import * as Sentry from '@sentry/node';
 import { config } from '../config/env.js';
 import { parseIntentSafe as parseIntent, parseAppointmentDetails } from '../services/claude.js';
-import { createAppointment, updateCareRecipient, acknowledgeMedicationLog, getOrCreateAccount, updateAccount, getConversationHistory, saveMessage, getPrimaryCareRecipient, logMessage, countUnknownIntentsLastHour } from '../services/supabase.js';
+import { createAppointment, updateCareRecipient, acknowledgeMedicationLog, getOrCreateAccount, updateAccount, getConversationHistory, saveMessage, getPrimaryCareRecipient, logMessage, countUnknownIntentsLastHour, getSubscriptionStatus } from '../services/supabase.js';
 import { sendTextMessage } from '../services/whatsapp.js';
 import { handleOnboarding } from '../services/onboarding.js';
 import { createSubscription, getPaymentLink } from '../services/razorpay.js';
@@ -1857,15 +1857,6 @@ function addDays(dateStr, days) {
 }
 
 // ─── Subscription helpers ─────────────────────────────────────────────────────
-
-function getSubscriptionStatus(account) {
-  if (account.subscription_status === 'active') return 'active';
-  const trialStart = new Date(account.created_at);
-  if (isNaN(trialStart.getTime())) return 'trial';
-  const trialEnd = new Date(trialStart);
-  trialEnd.setDate(trialEnd.getDate() + 7);
-  return new Date() < trialEnd ? 'trial' : 'expired';
-}
 
 async function sendTrialStartedMessage(phone) {
   try {
