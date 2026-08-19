@@ -5,7 +5,7 @@ import { parseIntentSafe as parseIntent, parseAppointmentDetails } from '../serv
 import { createAppointment, updateCareRecipient, acknowledgeMedicationLog, getOrCreateAccount, updateAccount, getConversationHistory, saveMessage, getPrimaryCareRecipient, logMessage, countUnknownIntentsLastHour, getSubscriptionStatus } from '../services/supabase.js';
 import { sendTextMessage } from '../services/whatsapp.js';
 import { handleOnboarding } from '../services/onboarding.js';
-import { createSubscription, getPaymentLink } from '../services/razorpay.js';
+import { createSubscription, getOrCreatePaymentLink } from '../services/razorpay.js';
 import { generateHealthCard, sendHealthCardOffer, startHealthCardSetup, handleHealthCardSetup, startHealthCardFieldUpdate, handleHealthCardUpdate } from '../services/health-card.js';
 import { findNearbyClinics } from '../services/maps.js';
 import {
@@ -1875,13 +1875,7 @@ async function sendTrialStartedMessage(phone) {
 async function getExpiredReply(account, lang) {
   let paymentUrl = '';
   try {
-    if (account.razorpay_subscription_id) {
-      paymentUrl = await getPaymentLink(account.razorpay_subscription_id);
-    } else {
-      const result = await createSubscription(account.account_phone);
-      await updateAccount(account.account_phone, { razorpay_subscription_id: result.id });
-      paymentUrl = result.paymentUrl;
-    }
+    paymentUrl = await getOrCreatePaymentLink(account);
   } catch (e) {
     console.error('Failed to get payment link for expired user:', e.message);
   }

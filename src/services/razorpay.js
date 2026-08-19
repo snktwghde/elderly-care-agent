@@ -1,6 +1,7 @@
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import { config } from '../config/env.js';
+import { updateAccount } from './supabase.js';
 
 const razorpay = new Razorpay({
   key_id: config.razorpay.keyId,
@@ -21,6 +22,15 @@ export async function createSubscription(accountPhone) {
 export async function getPaymentLink(subscriptionId) {
   const subscription = await razorpay.subscriptions.fetch(subscriptionId);
   return subscription.short_url;
+}
+
+export async function getOrCreatePaymentLink(account) {
+  if (account.razorpay_subscription_id) {
+    return getPaymentLink(account.razorpay_subscription_id);
+  }
+  const { id, paymentUrl } = await createSubscription(account.account_phone);
+  await updateAccount(account.account_phone, { razorpay_subscription_id: id });
+  return paymentUrl;
 }
 
 export function verifyWebhookSignature(rawBody, signature) {

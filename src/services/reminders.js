@@ -1,6 +1,7 @@
 import cron from 'node-cron';
-import { getDueReminders, updateAppointment, getPrimaryCareRecipient, getMedicationSchedules, getMedicationLogToday, createMedicationLog, updateCareRecipient, updateAccount, getOrCreateAccount, getSubscriptionStatus } from './supabase.js';
+import { getDueReminders, updateAppointment, getPrimaryCareRecipient, getMedicationSchedules, getMedicationLogToday, createMedicationLog, updateCareRecipient, updateAccount, getOrCreateAccount, getSubscriptionStatus, getTrialAccountsPendingWarning } from './supabase.js';
 import { sendTextMessage, sendTemplateMessage } from './whatsapp.js';
+import { getOrCreatePaymentLink } from './razorpay.js';
 
 function toWhatsAppPhone(phone) {
   return phone.startsWith('+') ? phone : `+${phone.replace(/\D/g, '')}`;
@@ -168,9 +169,46 @@ async function processMedicationReminders() {
   }
 }
 
+async function processTrialWarnings() {
+  const accounts = await getTrialAccountsPendingWarning();
+
+  for (const account of accounts) {
+    const trialEnd = new Date(account.created_at);
+    trialEnd.setDate(trialEnd.getDate() + 7);
+    const h = hoursUntil(trialEnd.toISOString());
+    if (h < 23.75 || h > 24.25) continue;
+
+    // Mark sent BEFORE sending to prevent spam
+    await updateAccount(account.account_phone, { trial_warning_sent: true });
+
+    const recipient = await getPrimaryCareRecipient(account.account_phone);
+    const lang = recipient?.preferred_language === 'hindi' ? 'hindi'
+      : recipient?.preferred_language === 'english' ? 'english'
+      : recipient ? 'marathi' : 'english';
+
+    let paymentUrl = '';
+    try {
+      paymentUrl = await getOrCreatePaymentLink(account);
+    } catch (e) {
+      console.error(`Failed to get payment link for trial warning ${account.account_phone.slice(0, 5)}***:`, e.message);
+    }
+    const linkLine = paymentUrl ? `\n\n${paymentUrl}` : '';
+
+    const msg = {
+      english: `⏰ Your 7-day free trial ends in 24 hours.\n\nSubscribe for ₹199/month to keep clinic search, medication reminders, and family alerts working without interruption:${linkLine}`,
+      marathi: `⏰ तुमचा ७ दिवसांचा free trial २४ तासांत संपणार आहे.\n\nClinic search, औषध reminders आणि family alerts विना व्यत्यय सुरू ठेवण्यासाठी ₹199/महिना subscribe करा:${linkLine}`,
+      hindi:   `⏰ आपका ७ दिन का free trial २४ घंटों में खत्म हो जाएगा।\n\n₹199/महीना subscribe करके clinic search, दवाई reminders और family alerts बिना रुकावट जारी रखें:${linkLine}`,
+    }[lang];
+
+    await sendTextMessage(toWhatsAppPhone(account.account_phone), msg)
+      .catch(e => console.error(`Trial warning failed to ${account.account_phone.slice(0, 5)}***:`, e.message));
+  }
+}
+
 export function startReminderScheduler() {
   cron.schedule('*/5 * * * *', async () => {
     try { await processReminders(); } catch (err) { console.error('Reminder error:', err.message); }
     try { await processMedicationReminders(); } catch (err) { console.error('Medication reminder error:', err.message); }
+    try { await processTrialWarnings(); } catch (err) { console.error('Trial warning error:', err.message); }
   });
 }

@@ -36,6 +36,17 @@ export async function updateAccount(accountPhone, fields) {
   return data;
 }
 
+export async function getTrialAccountsPendingWarning() {
+  const { data, error } = await supabase
+    .from('accounts')
+    .select('*')
+    .eq('subscription_status', 'trial')
+    .eq('trial_warning_sent', false);
+
+  if (error) throw new Error(`Failed to get trial accounts pending warning: ${error.message}`);
+  return data || [];
+}
+
 export function getSubscriptionStatus(account) {
   if (account.subscription_status === 'active') return 'active';
   const trialStart = new Date(account.created_at);
