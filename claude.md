@@ -8,9 +8,9 @@
 
 ## What We're Building
 
-A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** — handling clinic appointment booking (via voice call), medication reminders, family notifications, and emergency SOS coordination.
+A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** — finding clinics and handing over their contact details, medication reminders, a digital health card, family notifications, and emergency SOS coordination.
 
-- **Who pays**: Adult children (28–40, urban India), ₹299/month
+- **Who pays**: Adult children (28–40, urban India), ₹199/month
 - **Who uses**: Elderly parents (60+), WhatsApp-only, no app download
 - **Core value**: Peace of mind. Daily friction removed.
 
@@ -22,7 +22,7 @@ A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** �
 - 40–75% of elderly miss medication doses — app-based solutions fail them (IJRPR Apr 2026)
 - IRCTC/clinic booking UX is Severity 5 pain for elderly users
 - Founder personal pain signal: own parents face these exact problems daily
-- No competitor serves this with WhatsApp/voice-first India-native experience
+- No competitor serves this as a WhatsApp-native, Indic-language coordination layer for families
 
 ---
 
@@ -32,18 +32,18 @@ A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** �
 |-----------|------|-----|
 | Frontend/Interface | WhatsApp (Meta Cloud API) | Zero download, elderly users already have it |
 | AI Brain | Claude API (claude-sonnet-4-6) | Intent parsing, multi-language, conversation management |
-| Voice Calls | Twilio Programmable Voice | Cheapest at volume, best-verified India telephony access. Paired with own STT/TTS layer (TBD, test in Phase 4) |
+| Voice input (planned) | Sarvam speech-to-text | Elder sends a WhatsApp voice note instead of typing — transcript feeds the existing intent parser. Indic-language speech is Sarvam's core strength |
 | Backend | Node.js + Express | Simple, Claude Code friendly |
 | Database | Supabase (free tier) | Easy setup, ~8,300 user ceiling on free plan |
 | Deployment | Railway | One-click deploy, no DevOps needed |
 | Clinic Finder | Google Maps Places API | Free tier covers thousands of calls/month |
-| Payments | Razorpay | India-native, ₹299/month subscription |
+| Payments | Razorpay | India-native, ₹199/month subscription |
 
 ### What We're NOT Using
 
+- **AI voice calling to clinics — DROPPED (Sept 2026), not deferred.** Two blockers that no vendor swap fixes: TRAI regulations on automated outbound calling, and the fact that most Indian clinics have no digital booking system on the other end of the call — there is nothing to integrate with even if the call connects. Phase 4 testing also showed a US +1 number reads as spam, AI voice causes receptionists to hang up, and STT is poor on 8kHz phone audio. CareProxy hands the user the clinic's number and address instead; the family makes the call. Twilio code remains in `src/routes/twilio.js` and `src/services/twilio.js` — dead, do not extend.
 - **ABDM for appointment booking** — Physical Consultation Booking API not live, marked "Coming Soon." See `/research/ABDM_June_2026.md`.
-- **Vapi.ai** — Demoted after wider 5-platform comparison. India-specific pricing/deliverability proof too thin vs Twilio. See `/research/Voice_AI_5Platform_Comparison_June_2026.md`.
-- **ElevenLabs** — India deployment sales-gated, leads to weeks of delays. See `/research/Vapi_vs_ElevenLabs_June_2026.md` (superseded but still accurate on this point).
+- **Vapi.ai / ElevenLabs / Deepgram** — all were candidates for the clinic-calling stack. Moot now that voice calling is dropped. See `/research/Voice_AI_5Platform_Comparison_June_2026.md` for the original comparison.
 - Custom mobile app — WhatsApp IS the app
 - Complex orchestration platforms (n8n, Make, etc.) — unnecessary for V1
 
@@ -84,9 +84,9 @@ A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** �
 - [ ] Return top 3 results with name, address, phone, rating
 - [ ] Test: "nearest orthopaedic clinic" → returns 3 clinics near saved address
 
-### Phase 4 — Clinic Finder Result + Direct Call Fallback (Week 3–4)
-**UPDATE (June 2026): Voice booking deprioritised. Core problems: US +1 number looks like spam, AI voice causes receptionists to hang up, Twilio STT poor on Indian phone audio. Moving voice calling to Phase 9 for proper investment (Indian number + Deepgram STT + ElevenLabs/cloned voice). Phase 4 code exists in `src/routes/twilio.js` and `src/services/twilio.js` — do not delete.**
-- [x] Twilio Programmable Voice integration (code done, tested, deprioritised)
+### Phase 4 — Clinic Finder Result + Contact Handoff (Week 3–4)
+**UPDATE (Sept 2026): Voice booking DROPPED permanently — see "What We're NOT Using" above. TRAI rules on automated outbound calling plus the absence of any digital booking system at most Indian clinics mean there is no version of this that works, regardless of vendor. Handing the user the clinic's number and address is now the permanent design, not a fallback. Twilio code in `src/routes/twilio.js` and `src/services/twilio.js` is dead — do not extend it.**
+- [x] Twilio Programmable Voice integration (code written and tested — now abandoned)
 - [x] Time preference collection before call
 - [x] Appointment status tracking in Supabase
 - [x] When user selects a clinic, send the clinic phone number + address directly
@@ -113,19 +113,21 @@ A WhatsApp-first AI agent that acts as a **digital proxy for elderly parents** �
 - [ ] Test: trigger SOS → verify family receives message within 10 seconds
 
 ### Phase 8 — Payments (Week 6)
-- [ ] Razorpay subscription integration (₹299/month)
+- [ ] Razorpay subscription integration (₹199/month)
 - [ ] 7-day free trial before payment required
 - [ ] Payment link sent via WhatsApp after onboarding
 - [ ] Subscription status check on every agent interaction
 - [ ] **Before launch**: Confirm Razorpay transaction fee % (currently 2–3% placeholder). See `/research/Razorpay_Subscriptions_June_2026.md`.
 - [ ] Test: complete payment flow, verify subscription activates
 
-### Phase 9 — Voice Booking + Polish + Launch (Week 6–7)
-**Voice booking re-enters here with proper investment to fix the 3 root problems from Phase 4 testing.**
-- [ ] Get Indian Twilio number (regulatory docs: Aadhaar/PAN + business proof) — clinic sees local number, not spam US +1
-- [ ] Switch STT to Deepgram (better Hindi/Marathi on phone audio than Twilio's engine)
-- [ ] Switch TTS to ElevenLabs or cloned voice — human-sounding, not robotic
-- [ ] Re-test voice call with Indian number + new STT/TTS on real clinic
+### Phase 9 — Voice Input + Polish + Launch (Week 6–7)
+**Voice calling to clinics is dropped (see Phase 4 note). What replaces it is voice on the user's side: the elder sends a WhatsApp voice note instead of typing — which removes the actual barrier, since typing is what they struggle with, not reading.**
+- [ ] Accept `audio` messages in the webhook (currently dropped: `if (message.type !== 'text') return;`)
+- [ ] Fetch + download the voice note from Meta's media API (two calls, auth-protected URL)
+- [ ] Transcribe via Sarvam speech-to-text (Hindi/Marathi/English)
+- [ ] Feed transcript into the existing `parseIntent()` — everything downstream unchanged
+- [ ] **Open question**: WhatsApp voice notes are OGG/Opus. If Sarvam STT won't accept that directly, an ffmpeg conversion step is needed on Railway — check before building
+- [ ] **Deliberately not doing**: spoken replies (TTS). Most replies are scannable reference data — clinic numbers, Maps links, the health card, `tel:` links — which lose their value when read aloud rather than displayed
 - [ ] Multi-language: Hindi, Marathi, English detection and response
 - [ ] Error handling: what happens when clinic doesn't answer, API fails, etc.
 - [ ] **Structured logging**: log every incoming message, parsed intent, and outgoing reply to Supabase `message_logs` table — gives visibility into what's failing in production
@@ -144,9 +146,9 @@ All research archived in `/research/` with source citations. See `/research/READ
 
 | Finding | Decision | Impact |
 |---------|----------|--------|
-| **ABDM physical booking not live** | Removed from Phase 1–4 | Phase 4: clinic finder + direct call fallback |
-| **Twilio voice: US number = spam, AI voice = hang-up, STT = poor Indian audio** | Voice booking moved to Phase 9 | Phase 9: Indian number + Deepgram STT + ElevenLabs TTS |
-| **Hindi/Marathi quality unverified for ALL voice platforms** | Confirmed bad in Phase 4 testing | Phase 9: re-test with proper stack before scaling |
+| **ABDM physical booking not live** | Removed from Phase 1–4 | Phase 4: clinic finder + contact handoff |
+| **Twilio voice: US number = spam, AI voice = hang-up, STT = poor Indian audio** | Voice booking initially moved to Phase 9 | Superseded Sept 2026 — dropped entirely, see row below |
+| **TRAI limits on automated outbound calling + no digital booking system at most Indian clinics** | Clinic voice calling dropped permanently (Sept 2026) | Contact handoff is the permanent design; Phase 9 repurposed to voice *input* via Sarvam STT |
 | **WhatsApp test setup free** | Start Phase 1 today | $0 cost, 5 test numbers, no KYC needed |
 | **Razorpay fee % unconfirmed** | Use 2–3% placeholder | Confirm before Phase 8 launch |
 | **Supabase ~8,300 user ceiling** | Proceed on free tier | Well above V1 target of 500 users |
@@ -197,13 +199,13 @@ Claude API parses intent (language-agnostic)
          │     ↓
          │   Google Maps API → find nearest relevant clinic
          │     ↓
-         │   Twilio → place AI voice call to clinic
+         │   Clinic name + phone + address sent to user — they make the call
          │     ↓
-         │   Confirmation captured → stored in Supabase
+         │   User reports back that they booked → details parsed, stored in Supabase
          │     ↓
          │   WhatsApp message to elderly user: "Appointment confirmed"
          │     ↓
-         │   WhatsApp message to family contacts: "Papa/Mummy appointment booked"
+         │   WhatsApp template to family contacts: "Papa/Mummy appointment booked"
          │     ↓
          │   Reminder scheduled: evening before + 2 hours before
          │
@@ -229,14 +231,17 @@ Claude API parses intent (language-agnostic)
 | Vertical vs super-agent | Vertical (health/elderly only) | Tata Neu failure, 100+ horizontal startup failures | June 2026 |
 | WhatsApp-first interface | WhatsApp only | Elderly users already have it, no download friction | June 2026 |
 | Voice booking mechanism | Deferred to Phase 9 | Tested in Phase 4: US +1 looks like spam, AI voice causes hang-ups, Twilio STT poor on Indian phone audio. Phase 9 will use Indian number + Deepgram + ElevenLabs | June 2026 |
+| Clinic voice calling | **DROPPED — superseded the June decision above** | TRAI rules on automated outbound calling, and most Indian clinics have no digital booking system to integrate with even if the call connects. No vendor swap fixes either. Contact handoff (number + address to the user) is the permanent design | Sept 2026 |
+| Voice on the user's side | Sarvam speech-to-text — elder sends a voice note instead of typing | Typing is the elder's actual barrier, not reading. Transcript feeds the existing intent parser unchanged. Spoken replies (TTS) deliberately excluded — most replies are scannable reference data (clinic numbers, Maps links, health card) that lose value when read aloud | Sept 2026 |
 | Emergency dispatch | Coordination only (no autonomous dispatch) | Article 21 liability, Clinical Establishments Act | June 2026 |
 | Pricing | ₹299/month per family | WTP signal from earlier research | June 2024 |
+| Pricing (current) | **₹199/month per family** — supersedes the ₹299 row above | Briefly set to ₹499 during Phase 10, then reverted to ₹199 (commit `1fe2e53`). ₹199 reflects what a solo, software-only operation can sustainably deliver — no call centre, no field staff — and sits 10–85× below human-service incumbents | Aug 2026 |
 
 ---
 
 ## Competitive Position
 
-**Direct competitors**: None at this exact intersection (WhatsApp-first, voice AI clinic booking, elderly India, family notification layer)
+**Direct competitors**: None at this exact intersection (WhatsApp-first, no app download, elderly India, Indic-language, family notification layer). Nearest analogues found in Aug 2026 research: Khyaal (₹99/mo, WhatsApp heritage, but community/wellness not healthcare coordination) and Citraverse (healthcare coordination, but pre-seed and unproven at scale). Human-service incumbents — Emoha, Yodda, Tribeca, Samarth — run ₹2,000–₹24,000/mo with care managers and call centres.
 
 **Biggest threats**:
 1. Meta Business Agent — 500M WhatsApp India users
