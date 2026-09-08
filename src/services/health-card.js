@@ -1,7 +1,7 @@
 import { updateAccount, updateCareRecipient, getPrimaryCareRecipient } from './supabase.js';
-import { sendTextMessage } from './whatsapp.js';
+import { sendTextMessage, sendNamedTemplateMessage } from './whatsapp.js';
 
-export function generateHealthCard(recipient) {
+export function generateHealthCard(recipient, { includeHeader = true } = {}) {
   const name = recipient?.recipient_name || 'Patient';
   const bloodGroup = recipient?.blood_group || 'Not provided';
   const medications = (recipient?.medication_schedule || []).map(m => m.name).join(', ') || 'Not provided';
@@ -12,9 +12,7 @@ export function generateHealthCard(recipient) {
   const history = recipient?.medical_history || 'Not provided';
   const emergency = (recipient?.family_contacts || [])[0] || 'Not provided';
 
-  return [
-    `🩺 *Health Card — ${name}*`,
-    `─────────────────────`,
+  const fields = [
     `🩸 Blood Group: ${bloodGroup}`,
     `💊 Current Medications: ${medications}`,
     `⚠️ Allergies: ${allergies}`,
@@ -22,11 +20,23 @@ export function generateHealthCard(recipient) {
     `🔪 Surgeries: ${surgeries}`,
     `📋 Medical History: ${history}`,
     `📞 Emergency Contact: ${emergency}`,
+  ];
+
+  if (!includeHeader) return fields.join('\n');
+
+  return [
+    `🩺 *Health Card — ${name}*`,
+    `─────────────────────`,
+    ...fields,
     `─────────────────────`,
   ].join('\n');
 }
 
-async function sendHealthCardToFamily(accountPhone, lang) {
+// WhatsApp caps template parameter values — keep the card under the limit so a long
+// medical history can't silently fail the send.
+const MAX_CARD_CHARS = 900;
+
+async function sendHealthCardToFamily(accountPhone) {
   const recipient = await getPrimaryCareRecipient(accountPhone);
   if (!recipient) return;
 
@@ -34,16 +44,15 @@ async function sendHealthCardToFamily(accountPhone, lang) {
   const familyContacts = (recipient.family_contacts || []).filter(p => toE164(p) !== accountPhone);
   if (!familyContacts.length) return;
 
-  const name = recipient.recipient_name || 'Your family member';
-  const intro = {
-    english: `🩺 ${name}'s health card has just been set up. Saving this here in case it's ever needed in an emergency.\n\n`,
-    marathi: `🩺 ${name} चे health card नुकतेच सेट झाले आहे. आणीबाणीच्या वेळी उपयोगी पडेल म्हणून हे जतन करून ठेवा.\n\n`,
-    hindi:   `🩺 ${name} का health card अभी सेट हुआ है। आपातकाल में काम आएगा, इसे सेव कर लें.\n\n`,
-  }[lang] || `🩺 ${name}'s health card has just been set up. Saving this here in case it's ever needed in an emergency.\n\n`;
+  const fullCard = generateHealthCard(recipient, { includeHeader: false });
+  const card = fullCard.length > MAX_CARD_CHARS ? `${fullCard.slice(0, MAX_CARD_CHARS)}…` : fullCard;
 
-  const card = intro + generateHealthCard(recipient);
+  // ponytail: English-only template for now — only language version approved so far
   await Promise.all(familyContacts.map(p =>
-    sendTextMessage(p, card).catch(e => console.error(`[Health card family send failed] ${p.slice(0, 5)}***:`, e.message))
+    sendNamedTemplateMessage(toE164(p), 'health_card_family', 'en', {
+      recipient_name: recipient.recipient_name || 'Your family member',
+      health_card: card,
+    }).catch(e => console.error(`[Health card family send failed] ${p.slice(0, 5)}***:`, e.message))
   ));
 }
 
@@ -206,7 +215,7 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
           const combined = existing ? `${existing}\n${detail}` : detail;
           await updateCareRecipient(account_phone, { medical_history: combined.slice(0, 500) });
           await updateAccount(account_phone, { pending_action: null, pending_data: null });
-          await sendHealthCardToFamily(account_phone, lang).catch(e => console.error('[Health card family send failed]', e.message));
+          await sendHealthCardToFamily(account_phone).catch(e => console.error('[Health card family send failed]', e.message));
           return HEALTH_CARD_SAVED[lang];
         }
 
@@ -242,7 +251,7 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
       await updateCareRecipient(account_phone, { medical_history: input.slice(0, 500) });
     }
     await updateAccount(account_phone, { pending_action: null });
-    await sendHealthCardToFamily(account_phone, lang).catch(e => console.error('[Health card family send failed]', e.message));
+    await sendHealthCardToFamily(account_phone).catch(e => console.error('[Health card family send failed]', e.message));
     return HEALTH_CARD_SAVED[lang];
   }
 
@@ -250,7 +259,7 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
   if (pending_action === 'health_card_hospitalization_when') {
     if (isSkip) {
       await updateAccount(account_phone, { pending_action: null, pending_data: null });
-      await sendHealthCardToFamily(account_phone, lang).catch(e => console.error('[Health card family send failed]', e.message));
+      await sendHealthCardToFamily(account_phone).catch(e => console.error('[Health card family send failed]', e.message));
       return HEALTH_CARD_SAVED[lang];
     }
     await updateAccount(account_phone, { pending_action: 'health_card_hospitalization_reason', pending_data: { hospitalization_when: input.slice(0, 100) } });
@@ -272,7 +281,7 @@ export async function handleHealthCardSetup(account, messageText, lang, recipien
       await updateCareRecipient(account_phone, { medical_history: updated.slice(0, 500) });
     }
     await updateAccount(account_phone, { pending_action: null, pending_data: null });
-    await sendHealthCardToFamily(account_phone, lang).catch(e => console.error('[Health card family send failed]', e.message));
+    await sendHealthCardToFamily(account_phone).catch(e => console.error('[Health card family send failed]', e.message));
     return HEALTH_CARD_SAVED[lang];
   }
 

@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/node';
 import { config } from '../config/env.js';
 import { parseIntentSafe as parseIntent, parseAppointmentDetails } from '../services/claude.js';
 import { createAppointment, updateCareRecipient, acknowledgeMedicationLog, getOrCreateAccount, updateAccount, getConversationHistory, saveMessage, getPrimaryCareRecipient, logMessage, countUnknownIntentsLastHour, getSubscriptionStatus } from '../services/supabase.js';
-import { sendTextMessage } from '../services/whatsapp.js';
+import { sendTextMessage, sendNamedTemplateMessage } from '../services/whatsapp.js';
 import { handleOnboarding } from '../services/onboarding.js';
 import { createSubscription, getOrCreatePaymentLink } from '../services/razorpay.js';
 import { generateHealthCard, sendHealthCardOffer, startHealthCardSetup, handleHealthCardSetup, startHealthCardFieldUpdate, handleHealthCardUpdate } from '../services/health-card.js';
@@ -1074,12 +1074,11 @@ async function handlePendingAction(account, messageText, lang, recipient) {
           : s.end_date === null ? ' (lifetime)' : '';
         return `• ${s.name}: ${s.times.map(displayTime).join(', ')} (${s.frequency}x daily${durLabel})`;
       }).join('\n');
-      const familyMsg = lang === 'hindi'
-        ? `💊 ${recipient.recipient_name} की दवाइयों के reminders सेट हो गए।\n\n${summary}\n\n— CareProxy`
-        : lang === 'english'
-        ? `💊 Medication reminders have been set for ${recipient.recipient_name}.\n\n${summary}\n\n— CareProxy`
-        : `💊 ${recipient.recipient_name} यांच्या औषधांचे reminders सेट झाले.\n\n${summary}\n\n— CareProxy`;
-      await Promise.all(familyContacts.map(p => sendTextMessage(toE164Med(p), familyMsg).catch(e => console.error(`Send failed to ${p}:`, e.message))));
+      // ponytail: English-only template for now — only language version submitted/approved so far
+      await Promise.all(familyContacts.map(p => sendNamedTemplateMessage(toE164Med(p), 'medication_setup_family', 'en', {
+        recipient_name: recipient.recipient_name,
+        medicine_list: summary,
+      }).catch(e => console.error(`Send failed to ${p}:`, e.message))));
     }
 
     const confirmSummary = updatedSchedules.map(s => {
@@ -1743,29 +1742,13 @@ async function handleSOS(account, lang, recipient) {
   const recipientPhone = recipient?.recipient_phone ? toE164(recipient.recipient_phone) : null;
 
   if (familyContacts.length > 0) {
-    const callLine = recipientPhone
-      ? (lang === 'hindi' ? `📞 उन्हें अभी call करें: ${recipientPhone}`
-          : lang === 'english' ? `📞 Call them now: ${recipientPhone}`
-          : `📞 आत्ता call करा: ${recipientPhone}`)
-      : (lang === 'hindi' ? `📞 उन्हें अभी call करें।`
-          : lang === 'english' ? `📞 Call them now.`
-          : `📞 आत्ता call करा.`);
-    const alertMsg = lang === 'hindi'
-      ? `🆘 *${name}* को मदद चाहिए!\n\n${callLine}\n\n— CareProxy`
-      : lang === 'english'
-      ? `🆘 *${name}* needs help!\n\n${callLine}\n\n— CareProxy`
-      : `🆘 *${name}* यांना मदत हवी आहे!\n\n${callLine}\n\n— CareProxy`;
-
-    const ambulanceMsg = lang === 'hindi'
-      ? `🚑 एम्बुलेंस नंबर:\n\n• सरकारी एम्बुलेंस: tel:108\n• पुलिस: tel:100\n• आपातकाल: tel:112`
-      : lang === 'english'
-      ? `🚑 Ambulance numbers:\n\n• Ambulance: tel:108\n• Police: tel:100\n• Emergency: tel:112`
-      : `🚑 Ambulance नंबर:\n\n• सरकारी Ambulance: tel:108\n• पोलीस: tel:100\n• आपत्काल: tel:112`;
-
-    await Promise.all(familyContacts.flatMap(p => [
-      sendTextMessage(p, alertMsg).catch(e => console.error(`SOS alert failed to ${p.slice(0, 5)}***:`, e.message)),
-      sendTextMessage(p, ambulanceMsg).catch(e => console.error(`SOS ambulance failed to ${p.slice(0, 5)}***:`, e.message)),
-    ]));
+    // ponytail: English-only template for now — only language version submitted/approved so far.
+    // Consolidated into one template send (was 2 free-form messages) — also fixes the underlying bug:
+    // free-form sendTextMessage silently fails to any contact who hasn't messaged the bot within 24h.
+    await Promise.all(familyContacts.map(p => sendNamedTemplateMessage(p, 'emergency_alert_family', 'en', {
+      recipient_name: name,
+      contact_number: recipientPhone || 'Not available',
+    }).catch(e => console.error(`SOS alert failed to ${p.slice(0, 5)}***:`, e.message))));
 
     if (hasHealthCard) {
       const healthCard = generateHealthCard(recipient);
